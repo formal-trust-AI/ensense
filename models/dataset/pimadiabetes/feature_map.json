@@ -1,0 +1,1 @@
+{"Pregnancies": "f0", "Glucose": "f1", "BloodPressure": "f2", "SkinThickness": "f3", "Insulin": "f4", "BMI": "f5", "DiabetesPedigreeFunction": "f6", "Age": "f7", "Outcome": "label"}

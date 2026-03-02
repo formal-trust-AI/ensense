@@ -1,0 +1,43 @@
+,tool,benchmark,base options,--num_round,--max_depth,stdout,Time,lb,ub,accuracy
+0,main.py,train,--modelName adult --train_path /home/namrita/Documents/Benchmarks//datasets/adult/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/adult/test.csv --label_col income --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,200,5,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult/conf 
+accuracy: 0.8751151602006346 
+train_samples: 22792 
+test_samples: 9769 
+training_time_sec: 0.08106112480163574 
+",1.2072594165802002,,,0.8751151602006346
+1,main.py,train,--modelName adult --train_path /home/namrita/Documents/Benchmarks//datasets/adult/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/adult/test.csv --label_col income --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,200,6,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult/conf 
+accuracy: 0.8760364418057119 
+train_samples: 22792 
+test_samples: 9769 
+training_time_sec: 0.09401798248291016 
+",1.2615723609924316,,,0.8760364418057119
+2,main.py,train,--modelName adult --train_path /home/namrita/Documents/Benchmarks//datasets/adult/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/adult/test.csv --label_col income --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,300,5,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult/conf 
+accuracy: 0.8749104309550619 
+train_samples: 22792 
+test_samples: 9769 
+training_time_sec: 0.11323261260986328 
+",1.2626707553863525,,,0.8749104309550619
+3,main.py,train,--modelName adult --train_path /home/namrita/Documents/Benchmarks//datasets/adult/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/adult/test.csv --label_col income --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,300,6,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult/conf 
+accuracy: 0.8739891493499846 
+train_samples: 22792 
+test_samples: 9769 
+training_time_sec: 0.15422534942626953 
+",1.3898754119873047,,,0.8739891493499846
+4,main.py,train,--modelName adult --train_path /home/namrita/Documents/Benchmarks//datasets/adult/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/adult/test.csv --label_col income --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,500,5,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult/conf 
+accuracy: 0.8736820554816256 
+train_samples: 22792 
+test_samples: 9769 
+training_time_sec: 0.18851780891418457 
+",1.4177122116088867,,,0.8736820554816256
+5,main.py,train,--modelName adult --train_path /home/namrita/Documents/Benchmarks//datasets/adult/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/adult/test.csv --label_col income --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,500,6,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/adult/conf 
+accuracy: 0.8719418568942573 
+train_samples: 22792 
+test_samples: 9769 
+training_time_sec: 0.2447805404663086 
+",1.6383154392242432,,,0.8719418568942573

@@ -1,0 +1,5 @@
+feature,name,lb,ub
+0,sepal_length,0.0,1.0
+1,sepal_width,0.0,1.0
+2,petal_length,0.0169491525423728,1.0
+3,petal_width,0.0,1.0

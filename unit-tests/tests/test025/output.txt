@@ -1,0 +1,33 @@
+# Model name: models/winequality_red/winequality_red_t100_d5.json
+# Trees per class: 100
+# Number of classes: 6
+# Number of features: 11
+# Base score: 0.5
+# Max depth: 5
+# Feature names: {0: 'fixed acidity', 1: 'volatile acidity', 2: 'citric acid', 3: 'residual sugar', 4: 'chlorides', 5: 'free sulfur dioxide', 6: 'total sulfur dioxide', 7: 'density', 8: 'pH', 9: 'sulphates', 10: 'alcohol'}
+Set parameter Username
+Set parameter LicenseID to value 2704701
+Academic license - for non-commercial use only - expires 2026-09-08
+7119 leaves marked unaffected
+9016 total leaves
+
+==================================
+Applying Affected cons
+selfguard val 0.4054651081081643
+selfguard val 0.4054651081081643
+selfguard val 0.4054651081081643
+selfguard val 0.4054651081081643
+selfguard val 0.4054651081081643
+MILP constraints saved to milp_constraints.lp
+Time: 11.340872859989759 seconds
+Sensitive features: [2]
+
+Solution 1
+Objective Value: 4.01289232834
+sigmoid(x+base_val): 0.3980959005477152, sigmoid(x2+base_val): 0.017216646891881675
+sum1: 3.6311067469869975
+feature varying: [2]
+Sensitive sample 1:[ 0.2522125 , 0.6746575 , 0.1335615 , 0.12437399999999998 , 0.049296 , 0.015901 , 0.51395 , 0.7283459999999999 , 0.176647 , 0.357692 ]
+Sensitive sample 2:[ 0.2522125 , 0.6746575 , 0.1335615 , 0.12437399999999998 , 0.049296 , 0.015901 , 0.51395 , 0.7283459999999999 , 0.176647 , 0.357692 ]
+Output Values: [[8.5196036e-01 1.0780336e-01 2.1653606e-02 1.2732187e-02 5.6643593e-03
+  1.8608524e-04]] [[0.19444075 0.4631647  0.19668405 0.09590665 0.04843353 0.00137036]]

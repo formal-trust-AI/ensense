@@ -1,0 +1,1 @@
+{"age": "f0", "workclass": "f1", "fnlwgt": "f2", "education": "f3", "education-num": "f4", "marital-status": "f5", "occupation": "f6", "relationship": "f7", "race": "f8", "sex": "f9", "capital-gain": "f10", "capital-loss": "f11", "hours-per-week": "f12", "native-country": "f13", "income": "label"}

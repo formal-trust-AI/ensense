@@ -1,0 +1,19 @@
+# Model name: models/tree_verification_models/breast_cancer_robust/0004.resaved.json
+# Trees per class: 4
+# Number of classes: 1
+# Number of features: 11
+# Base score: 0.5
+# Max depth: 5
+# Feature names: {0: 'f0', 1: 'f1', 2: 'f2', 3: 'f3', 4: 'f4', 5: 'f5', 6: 'f6', 7: 'f7', 8: 'f8', 9: 'f9', 10: 'f10'}
+Set parameter Username
+Set parameter LicenseID to value 2704701
+Academic license - for non-commercial use only - expires 2026-09-08
+23 leaves marked unaffected
+29 total leaves
+
+==================================
+Applying Affected cons
+base_val : 0.0 guard :0.4054651081081643
+MILP constraints saved to milp_constraints.lp
+Time: 0.000715583999408409 seconds
+[3] 0.000715583999408409 Insensitive

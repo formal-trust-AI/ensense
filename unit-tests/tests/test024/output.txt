@@ -1,0 +1,20 @@
+# Model name: models/iris/iris_t100_d5.json
+# Trees per class: 100
+# Number of classes: 3
+# Number of features: 4
+# Base score: 0.5
+# Max depth: 4
+# Feature names: {0: 'sepal_length', 1: 'sepal_width', 2: 'petal_length', 3: 'petal_width'}
+Set parameter Username
+Set parameter LicenseID to value 2704701
+Academic license - for non-commercial use only - expires 2026-09-08
+698 leaves marked unaffected
+863 total leaves
+
+==================================
+Applying Affected cons
+selfguard val 0.4054651081081643
+selfguard val 0.4054651081081643
+MILP constraints saved to milp_constraints.lp
+Time: 0.007390468002995476 seconds
+[1] 0.007390468002995476 Insensitive

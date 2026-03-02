@@ -1,0 +1,1 @@
+./src/sensitive.py models/iris/iris_t100_d5.json --features 1 --timeout 100 --details models/dataset/iris/details.csv --all_opt --output_gap 0.4 0.6 --solver milp --multiclass --truelabel 0 --otherlabel 1

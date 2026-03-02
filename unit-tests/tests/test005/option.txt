@@ -1,0 +1,1 @@
+./src/sensitive.py models/tree_verification_models/breast_cancer_robust/0004.resaved.json --features 6 3 2 1 7 4 5 --timeout 100 --details models/dataset/breast_cancer/breast_cancer_details.csv --all_opt --solver pb

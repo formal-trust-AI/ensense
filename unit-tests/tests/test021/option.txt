@@ -1,0 +1,1 @@
+./src/sensitive.py models/adult/adult_t200_d5.json --features 3 9 --timeout 100 --details models/dataset/adult/details.csv --all_opt --output_gap 0.4 0.6 --in_distro_clauses outputs/output/learned-clauses_adult_t200_d5.txt --compute_data_distance --data_file models/dataset/adult/train.csv --solver milp

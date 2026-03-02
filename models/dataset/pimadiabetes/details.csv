@@ -1,0 +1,9 @@
+feature,name,lb,ub
+0,Pregnancies,0.0,1.0
+1,Glucose,0.0,0.9949748743718592
+2,BloodPressure,0.0,1.0
+3,SkinThickness,0.0,0.6060606060606061
+4,Insulin,0.0,0.8794326241134751
+5,BMI,0.0,1.0
+6,DiabetesPedigreeFunction,0.0025619128949615,0.9611443210930828
+7,Age,0.0,1.0

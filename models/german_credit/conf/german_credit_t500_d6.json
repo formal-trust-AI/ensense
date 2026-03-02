@@ -1,0 +1,18 @@
+{
+  "params": {
+    "max_depth": 6,
+    "objective": "binary:logistic",
+    "booster": "gbtree",
+    "learning_rate": 0.1
+  },
+  "num_round": 500,
+  "train_path": "/home/namrita/Documents/Benchmarks//datasets/german_credit/train.csv",
+  "test_path": "/home/namrita/Documents/Benchmarks//datasets/german_credit/test.csv",
+  "model_dir": "/home/namrita/Documents/Benchmarks//xgboost_models/german_credit",
+  "meta": {
+    "train_samples": 700,
+    "test_samples": 300,
+    "accuracy": 0.7733333333333333,
+    "training_time_sec": 0.16698098182678223
+  }
+}

@@ -1,0 +1,15 @@
+feature,name,lb,ub
+0,age,0.0,1.0
+1,workclass,0.0,1.0
+2,fnlwgt,0.0017610464405536,1.0
+3,education,0.0,1.0
+4,education-num,0.0,1.0
+5,marital-status,0.0,1.0
+6,occupation,0.0,1.0
+7,relationship,0.0,1.0
+8,race,0.0,1.0
+9,sex,0.0,1.0
+10,capital-gain,0.0,1.0
+11,capital-loss,0.0,1.0
+12,hours-per-week,0.0,1.0
+13,native-country,0.0,1.0

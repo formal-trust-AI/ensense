@@ -1,0 +1,1 @@
+./src/sensitive.py models/winequality_red/winequality_red_t100_d5.json --features 2 --timeout 200 --details models/dataset/winequality_red/details.csv --all_opt --output_gap 0.4 0.6 --solver milp --multiclass --truelabel 0 --otherlabel 1

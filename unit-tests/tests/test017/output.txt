@@ -1,0 +1,28 @@
+# Model name: models/tree_verification_models/breast_cancer_robust/0004.resaved.json
+# Trees per class: 4
+# Number of classes: 1
+# Number of features: 11
+# Base score: 0.5
+# Max depth: 5
+# Feature names: {0: 'f0', 1: 'f1', 2: 'f2', 3: 'f3', 4: 'f4', 5: 'f5', 6: 'f6', 7: 'f7', 8: 'f8', 9: 'f9', 10: 'f10'}
+Set parameter Username
+Set parameter LicenseID to value 2704701
+Academic license - for non-commercial use only - expires 2026-09-08
+0 leaves marked unaffected
+29 total leaves
+
+==================================
+Applying Affected cons
+base_val : 0.0 guard :0.8472978603872034
+MILP constraints saved to milp_constraints.lp
+Time: 0.0007538560021203011 seconds
+Sensitive features: [5, 7]
+
+Solution 1
+Objective Value: 2.1030445761000003
+sigmoid(x+base_val): 0.7120103180666969, sigmoid(x2+base_val): 0.2318531326695365
+sum1: 2.1030445761000003
+feature varying: [5, 7]
+Sensitive sample 1:[ 0.0 , 0.0 , -0.11111099250000003 , 0.11111102249999999 , -0.11111099250000003 , 0.0 , 0.0 , -0.11111099250000003 , -0.11111099250000003 ]
+Sensitive sample 2:[ 0.0 , 0.0 , -0.11111099250000003 , 0.11111102249999999 , -0.11111099250000003 , 0.0 , 0.0 , -0.11111099250000003 , -0.11111099250000003 ]
+Output Values: [0.7120103] [0.23185314]

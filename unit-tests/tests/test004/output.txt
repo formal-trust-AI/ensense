@@ -1,0 +1,14 @@
+# Model name: models/tree_verification_models/breast_cancer_robust/0004.resaved.json
+# Trees per class: 4
+# Number of classes: 1
+# Number of features: 11
+# Base score: 0.5
+# Max depth: 5
+# Feature names: {0: 'f0', 1: 'f1', 2: 'f2', 3: 'f3', 4: 'f4', 5: 'f5', 6: 'f6', 7: 'f7', 8: 'f8', 9: 'f9', 10: 'f10'}
+# Running the solver with precision level: 100
+Query 0:
+# Time: : 0.013247333001345396
+Sensitive: [7]
+Sensitive sample 1:[ 0 , 0 , 0.388889015 , 0.611111045 , 0.0 , 0.388889015 , 0.0 , 0.388889015 , 0 , 0.0 , 0.0 ]
+Sensitive sample 2:[ 0 , 0 , 0.388889015 , 0.611111045 , 0.0 , 0.388889015 , 0.0 , 0.0 , 0 , 0.0 , 0.0 ]
+Output values: [0.75241846 0.23185314]

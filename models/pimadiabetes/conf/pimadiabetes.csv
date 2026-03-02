@@ -1,0 +1,43 @@
+,tool,benchmark,base options,--num_round,--max_depth,stdout,Time,lb,ub,accuracy
+0,main.py,train,--modelName pimadiabetes --train_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/test.csv --label_col Outcome --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,200,5,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes/conf 
+accuracy: 0.7575757575757576 
+train_samples: 537 
+test_samples: 231 
+training_time_sec: 0.04368424415588379 
+",1.0769076347351074,,,0.7575757575757576
+1,main.py,train,--modelName pimadiabetes --train_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/test.csv --label_col Outcome --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,200,6,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes/conf 
+accuracy: 0.7575757575757576 
+train_samples: 537 
+test_samples: 231 
+training_time_sec: 0.5901999473571777 
+",1.6866109371185303,,,0.7575757575757576
+2,main.py,train,--modelName pimadiabetes --train_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/test.csv --label_col Outcome --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,300,5,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes/conf 
+accuracy: 0.7575757575757576 
+train_samples: 537 
+test_samples: 231 
+training_time_sec: 0.06289815902709961 
+",1.1081867218017578,,,0.7575757575757576
+3,main.py,train,--modelName pimadiabetes --train_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/test.csv --label_col Outcome --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,300,6,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes/conf 
+accuracy: 0.7445887445887446 
+train_samples: 537 
+test_samples: 231 
+training_time_sec: 0.6521577835083008 
+",1.8744585514068604,,,0.7445887445887446
+4,main.py,train,--modelName pimadiabetes --train_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/test.csv --label_col Outcome --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,500,5,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes/conf 
+accuracy: 0.7532467532467533 
+train_samples: 537 
+test_samples: 231 
+training_time_sec: 0.10608649253845215 
+",1.1941325664520264,,,0.7532467532467533
+5,main.py,train,--modelName pimadiabetes --train_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/train.csv --test_path /home/namrita/Documents/Benchmarks//datasets/pimadiabetes/test.csv --label_col Outcome --format csv --output_dir /home/namrita/Documents/Benchmarks//xgboost_models/ --booster gbtree,500,6,"model_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes 
+conf_path: /home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes/conf 
+accuracy: 0.7489177489177489 
+train_samples: 537 
+test_samples: 231 
+training_time_sec: 0.13227605819702148 
+",1.2583305835723877,,,0.7489177489177489

@@ -1,0 +1,18 @@
+{
+  "params": {
+    "max_depth": 6,
+    "objective": "binary:logistic",
+    "booster": "gbtree",
+    "learning_rate": 0.1
+  },
+  "num_round": 500,
+  "train_path": "/home/namrita/Documents/Benchmarks//datasets/pimadiabetes/train.csv",
+  "test_path": "/home/namrita/Documents/Benchmarks//datasets/pimadiabetes/test.csv",
+  "model_dir": "/home/namrita/Documents/Benchmarks//xgboost_models/pimadiabetes",
+  "meta": {
+    "train_samples": 537,
+    "test_samples": 231,
+    "accuracy": 0.7489177489177489,
+    "training_time_sec": 0.13227605819702148
+  }
+}

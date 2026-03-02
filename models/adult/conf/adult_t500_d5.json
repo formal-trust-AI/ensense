@@ -1,0 +1,18 @@
+{
+  "params": {
+    "max_depth": 5,
+    "objective": "binary:logistic",
+    "booster": "gbtree",
+    "learning_rate": 0.1
+  },
+  "num_round": 500,
+  "train_path": "/home/namrita/Documents/Benchmarks//datasets/adult/train.csv",
+  "test_path": "/home/namrita/Documents/Benchmarks//datasets/adult/test.csv",
+  "model_dir": "/home/namrita/Documents/Benchmarks//xgboost_models/adult",
+  "meta": {
+    "train_samples": 22792,
+    "test_samples": 9769,
+    "accuracy": 0.8736820554816256,
+    "training_time_sec": 0.18851780891418457
+  }
+}
