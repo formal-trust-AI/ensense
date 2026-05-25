@@ -3,6 +3,8 @@ import utils
 import pandas as pd
 import os
 
+SEED = 7
+
 class Options:
     def __init__(self):
         self.in_distro_clauses_file = ""
@@ -38,6 +40,11 @@ class Options:
         self.plot = False
         self.features = [0]
         self.precision = 1000
+        self.max_trees = None
+        self.perturb = 0.1
+        self.metric = None
+        self.pca_data = ""
+        self.pca_d = False
 
         
 def arguments_to_options(args):
@@ -52,10 +59,19 @@ def arguments_to_options(args):
     if args.sure_counterexamples: options.sureofcounter = True
     options.verbosity              = args.verbosity
     options.in_distro_clauses_file = args.in_distro_clauses
+    if options.in_distro_clauses_file and not os.path.exists(options.in_distro_clauses_file):
+        print(f"Input clauses file {options.in_distro_clauses_file} is missing!")
+        exit()
     options.data_file              = args.data_file
+    if options.data_file and not os.path.exists(options.data_file):
+        print(f"Data file {options.data_file} is missing!")
+        exit()
     options.model_library          = args.model_library 
     options.output_gap             = args.output_gap
     options.local_check_file       = args.local_check_file
+    if options.local_check_file and not os.path.exists(options.local_check_file):
+        print(f"Local check file {options.local_check_file} is missing!")
+        exit()
     options.timeout                = args.timeout
     options.max_trees              = args.max_trees
     
@@ -71,14 +87,24 @@ def arguments_to_options(args):
     options.strong_multi = args.strong_multi
     
     options.model_file   = args.filenum
+    if not os.path.exists(options.model_file):
+        print(f"Model file {options.model_file} is missing!")
+        exit()
     options.details_file = args.details
-
-    options.features = args.features
+    if options.details_file and not os.path.exists(options.details_file):
+        print(f"Details file {options.details_file} is missing!")
+        exit()
+    if args.features != None:
+        options.features = args.features
     options.precision = args.precision
     
     options.debug = args.debug
     options.prob = args.prob
+    options.perturb = args.perturb
 
+    options.metric = args.metric
+    options.pca_data = args.pca_data
+    options.pca_d = args.pca_d
     if args.local_check_sample:
         options.local_check_samples    = [args.local_check_sample]
     
@@ -189,7 +215,6 @@ def process_arguments():
     parser.add_argument(
         "--all_single", action="store_true", help="run on all singular feature sets"
     )
-
     parser.add_argument(
         "--prob", action="store_true", help="Activate probability objective"
     )
@@ -205,7 +230,7 @@ def process_arguments():
         "--lambda",
         type=int,
         default=100,
-        help="Lambda for the objective function",
+        help="Lambda for the objective function (deprecated)",
     )
     parser.add_argument(
         "--dataset",
@@ -313,42 +338,61 @@ def process_arguments():
         help="File containing data")
 
     parser.add_argument(
+        "--pca_data",
+        type=str,
+        default="",
+        help="Training CSV used to fit PCA constraints",
+    )
+
+    parser.add_argument(
+        "--pca_d",
+        action="store_true",
+        default=False,
+        help="Enable PCA constraints with auto-selected PCA dimension",
+    )
+
+    parser.add_argument(
         "--verbosity",
         type=int,
         default=0,
         help="Sets the level of verbosity of the tool!",
     )
     #---------------------------------------------------------
-    #   clemont specific arguments
+    #   monitor specific arguments
     #---------------------------------------------------------
     parser.add_argument(
         "--epsilon",
         type=float,
-        help="clemont:Epsilon for the FRNN monitor",
+        help="monitor:Epsilon for the FRNN monitor",
         default=0.2
     )
     parser.add_argument(
         "--predcolname",
         type=str,
-        help="clemont:Name of the column containing the model's prediction",
+        help="monitor:Name of the column containing the model's prediction",
         default="pred"
     )
     parser.add_argument(
         "--cfeaturefile",
         type=str,
-        help="clemont:File containing list of all features with type for clemont only" ,
+        help="monitor:File containing list of all features with type for clemont only" ,
         default=None
     )
     parser.add_argument(
         "--metric",
         type=str,
-        choices=["linf", "l2"],
-        default="linf",
-        help="clemont:Distance metric for FRNN (linf or l2)"
+        choices=["linf", "l2","l1","l0"],
+        default="l2",
+        help="monitor:Distance metric for FRNN(linf or l2) /data-ware"
     )
     
     # Parse the arguments
     args = parser.parse_args()
+    
+    if args.solver == "monitor":
+        if args.metric not in ["linf","l2"]:
+            print(f"for monitor, select metric from linf,l2")
+    
     if args.output_gap:
         if ( len(args.output_gap) != 2 or
              args.output_gap[0] >= 1 or args.output_gap[0] <= 0 or

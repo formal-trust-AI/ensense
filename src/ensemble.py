@@ -10,8 +10,20 @@ import math
 import pandas as pd
 import numpy as np
 import json
+import math
 
 pd.set_option('display.max_rows', 200)
+
+class Interval:
+    def __init__(self,bracklb,lb,ub,brackub):
+        
+        self.bracklb = bracklb
+        self.lb = lb
+        self.ub = ub
+        self.brackub = brackub
+
+    def printintv(self):
+        return f"{self.bracklb} {self.lb} {self.ub} {self.brackub}"
     
 class Ensemble:
     def __init__(self, options):
@@ -215,6 +227,14 @@ class Ensemble:
         self.op_range_list = [(float(i.min()-1), float(i.max()+1))
                               for i in (self.trees[self.trees['Feature'] == f'f{j}']['Split']
                                         for j in list(range(self.n_features)))]
+        # self.op_range_list = []
+        # for j in range(self.n_features):
+        #     splits = self.trees[self.trees['Feature'] == f'f{j}']['Split']
+        #     min_val, max_val = splits.min(), splits.max()
+        #     if pd.isna(min_val) or pd.isna(max_val):
+        #         self.op_range_list.append((-np.inf, np.inf))
+        #     else:
+        #         self.op_range_list.append((float(min_val - 1), float(max_val + 1)))
 
         # -----------------------------------------------------------
         # More information about the model from another file
@@ -249,8 +269,16 @@ class Ensemble:
         # Modify options after loading the model
         # --------------------------------------
         self.options.lgap,self.options.ugap = self.get_interpret_gap( self.options.lgap, self.options.ugap )
-        if self.options.precision == None or self.options.precision == 0:
-            self.options.precision = max(self.n_trees,100)
+        # ------------------------------------------------------------------------------
+        # milp solver does not necessarily need precision, but pb solver needs precision   
+        # ------------------------------------------------------------------------------
+        if (self.options.precision == None or self.options.precision == 0) and self.options.solver != 'milp':
+            self.options.precision = max(3*self.n_trees,100)
+            
+        # ------------------------------------------------------------------------------
+        # Modify sensitive features
+        # ------------------------------------------------------------------------------
+        if self.options.all_features: options.features = [i for i in range(self.n_features)]
         
         # --------------------------------------
         # Print vitals
@@ -266,6 +294,7 @@ class Ensemble:
         #     print(data)
         #     r = self.predict(data)
         #     exit()
+
 
     def get_root_name(self):
         if self.model_library == "lgbm":
@@ -311,9 +340,10 @@ class Ensemble:
 
         if self.model_library == "xgboost":
             if self.max_trees != None:
-                result = self.model.predict(xgb.DMatrix(data), arg, iteration_range=(0, max_trees))
+                result = self.model.predict(xgb.DMatrix(data), *arg, iteration_range=(0, self.options.max_trees))
             else:
-                result = self.model.predict(xgb.DMatrix(data), arg)                
+                result = self.model.predict(xgb.DMatrix(data), *arg)        
+                      
         elif self.model_library == "rf":
             result = self.model.predict(data)
         elif self.model_library == "lgbm":
@@ -324,10 +354,11 @@ class Ensemble:
         #-------------------------------------
         # Should always happen
         #-------------------------------------
-        if self.options.verbosity > 5:         
-            our_result = self.eval_trees(data,verbose=self.options.verbosity)
-            print('Library evaluation',result)
-            print('Our evaluation',our_result)        
+        if self.options.verbosity > 5:
+            for d in data:
+                our_result = self.eval_trees(d,verbose=self.options.verbosity)
+                print('Library evaluation',result)
+                print('Our evaluation',our_result)        
             # assert( our_result == result.tolist() )
         
         return result
@@ -460,7 +491,7 @@ class Ensemble:
             else:
                 f = int(f[1:])
                 diff = data[f] - row["Split"]
-                if verbose > 5: print('Tree path:', row['Feature'],row['Split'],data[f],diff)
+                if verbose > 8: print('Tree path:', row['Feature'],row['Split'],data[f],diff)
                 # if diff != 0 and abs(diff) < 0.001: print(row['Feature'],row['Split'],diff)
                 if self.split_kind == "<": c = data[f] <  row["Split"]
                 elif self.split_kind == "<="   : c = data[f] <= row["Split"]
@@ -523,7 +554,72 @@ class Ensemble:
             v2 = self.eval_tree(data2, tree)
             if v1 != v2:
                 print(i, v1, v2)
+     
+    def region2point(self, region):
+        eps = 1e-6
+        point = [0.0] * len(region)
 
+        for idx, reg in enumerate(region):
+            lb, ub = reg.lb, reg. ub
+            lb_open = (reg.bracklb == '(')
+            ub_open = (reg.brackub == ')')
+
+            if pd.isna(lb) or pd.isna(ub):
+                assert(pd.isna(lb) and pd.isna(ub))
+                point[idx] = 0.0
+                continue
+            if lb == -np.inf and ub == np.inf:
+                point[idx] = 0.0
+                continue
+            
+            if not lb_open: 
+                point[idx] = lb
+                continue
+            
+            if not ub_open:
+                point[idx] = ub
+                continue
+            
+            if lb != -np.inf and ub != np.inf:
+                lo = lb + eps if lb_open else lb
+                hi = ub - eps if ub_open else ub
+                if lo > hi:
+                    point[idx] = (lb + ub) / 2.0
+                else:
+                    point[idx] = (lo + hi) / 2.0
+                continue
+
+            if lb == -np.inf:
+                point[idx] = math.floor(ub - (eps if ub_open else 0.0))
+                continue
+            # ub = inf
+            point[idx] = math.ceil(lb + (eps if lb_open else 0.0))
+
+        return point
+
+    
+    def print_reg(self,region):
+        data  = "[ "
+        for idx,reg in enumerate(region):
+            data += f"{idx}:{reg.printintv()} "
+        data +=" ]"
+        return data
+                    
+
+    # def output(self,timetaken,sesnfeat, sensreg,outputvalues):
+    #     print(f"# Time: {timetaken}")
+    #     print(f"sensitive feature(s): {sesnfeat}")
+    #     if sensreg == [] and outputvalues == []:
+    #         print(f"Insensitive")
+    #     elif len(sensreg)>0 and len(outputvalues)>0:
+    #         region1, region2 = self.frmt_region(sensreg[0]), self.frmt_region(sensreg[1])
+    #         print( 'Sensitive sample 1:', "[ "," , ".join(region1)," ]")
+    #         print( 'Sensitive sample 2:', "[ "," , ".join(region2)," ]")
+
+    #         print(f"Output Values: {np.array(outputvalues)}")
+    #     else:
+    #         print(f"something went wrong")
+            
 
 # ------------------------------------------------
 #  To be removed

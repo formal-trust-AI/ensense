@@ -1,0 +1,30 @@
+Win Rates for Dataset: pimadiabetes
+========================================
+
+--- Pairwise L2 Norm Win Rates ---
+pca_clause: 58.0%
+pca_only: 52.8%
+pca_prob_clause: 49.1%
+pca_prob: 48.3%
+clause: 46.5%
+plain: 40.8%
+prob: 35.1%
+
+--- Mean Centroid L1 Win Rates ---
+pca_clause: 75.5%
+pca_only: 67.2%
+clause: 66.3%
+plain: 60.1%
+pca_prob_clause: 38.7%
+pca_prob: 27.4%
+prob: 10.8%
+
+--- Mean Centroid L2 Win Rates ---
+pca_clause: 74.0%
+pca_only: 69.3%
+clause: 64.8%
+plain: 61.3%
+pca_prob_clause: 39.4%
+pca_prob: 27.3%
+prob: 10.1%
+

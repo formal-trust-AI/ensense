@@ -5,7 +5,8 @@
 # Base score: 0.5
 # Max depth: 5
 # Feature names: {0: 'f0', 1: 'f1', 2: 'f2', 3: 'f3', 4: 'f4', 5: 'f5', 6: 'f6', 7: 'f7', 8: 'f8', 9: 'f9', 10: 'f10'}
-# Running the solver with precision level: 100
-Query 0:
-# Time: : 0.008747008017962798
-Insensitive [7]
+# Running the solver with precision level: : 100
+# --==> Query : 1/1
+# Insensitive : [7]
+# Time : 0.0506439208984375
+# Fraction of sensitive queries: : 0/1

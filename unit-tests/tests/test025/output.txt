@@ -5,29 +5,10 @@
 # Base score: 0.5
 # Max depth: 5
 # Feature names: {0: 'fixed acidity', 1: 'volatile acidity', 2: 'citric acid', 3: 'residual sugar', 4: 'chlorides', 5: 'free sulfur dioxide', 6: 'total sulfur dioxide', 7: 'density', 8: 'pH', 9: 'sulphates', 10: 'alcohol'}
-Set parameter Username
-Set parameter LicenseID to value 2704701
-Academic license - for non-commercial use only - expires 2026-09-08
-7119 leaves marked unaffected
-9016 total leaves
-
-==================================
-Applying Affected cons
-selfguard val 0.4054651081081643
-selfguard val 0.4054651081081643
-selfguard val 0.4054651081081643
-selfguard val 0.4054651081081643
-selfguard val 0.4054651081081643
-MILP constraints saved to milp_constraints.lp
-Time: 11.340872859989759 seconds
-Sensitive features: [2]
-
-Solution 1
-Objective Value: 4.01289232834
-sigmoid(x+base_val): 0.3980959005477152, sigmoid(x2+base_val): 0.017216646891881675
-sum1: 3.6311067469869975
-feature varying: [2]
-Sensitive sample 1:[ 0.2522125 , 0.6746575 , 0.1335615 , 0.12437399999999998 , 0.049296 , 0.015901 , 0.51395 , 0.7283459999999999 , 0.176647 , 0.357692 ]
-Sensitive sample 2:[ 0.2522125 , 0.6746575 , 0.1335615 , 0.12437399999999998 , 0.049296 , 0.015901 , 0.51395 , 0.7283459999999999 , 0.176647 , 0.357692 ]
-Output Values: [[8.5196036e-01 1.0780336e-01 2.1653606e-02 1.2732187e-02 5.6643593e-03
-  1.8608524e-04]] [[0.19444075 0.4631647  0.19668405 0.09590665 0.04843353 0.00137036]]
+# --==> Query : 0
+# Sensitive features : [2]
+# Time : 11.52724576095352
+Sensitive sample 1:[ 0.230088502 , 0.619863033 , [91m0.0199999996[0m , 0.150684938 , 0.116861433 , 0.0422535203 , 0.0141342757 , 0.536710739 , 0.700787425 , 0.167664677 , 0.353846163 ]
+Sensitive sample 2:[ 0.230088502 , 0.619863033 , [91m0.170000002[0m , 0.150684938 , 0.116861433 , 0.0422535203 , 0.0141342757 , 0.536710739 , 0.700787425 , 0.167664677 , 0.353846163 ]
+Output Values: [[7.7292287e-01 1.9199738e-01 2.1123584e-02 1.2277181e-02 1.4973801e-03
+  1.8153046e-04]] [[0.17350575 0.53612125 0.18871926 0.09096075 0.00937808 0.00131487]]

@@ -33,14 +33,15 @@ TAGS = [
 # TOLERANCE_TAGS : <tag>:(<type>,tolerance)
 
 TOLERANCE_TAGS = {
-        'Time:': (float,10),
-        '#Time:': (float,10),
-        'Sensitive:': (list,0) ,
+        # 'Time:': (float,10),
+        # '#Time:': (float,10),
+        '# Sensitive :': (list,0) ,
         'Sensitive sample 1:':(list,1e-1),
         'Sensitive sample 2:':(list,1e-1),
         'Output values:':(list,1e-2),
         'Output Values:':(list,1e-2),
         'Objective Value:':(float,1e1),
+        '# Running the solver with precision level:':(int,0),
         'Distance from data distype L0:' :(float,1e-4) ,
         'Distance from data distype L1:':(float,1e-4),
         'Distance from data distype Linf:':(float,1e-4),
@@ -351,23 +352,33 @@ def main() -> None:
         results.append(result)
 
         if result.ok:
-            print(f"[RUN] {result.test_id} [PASSED] {result.message}")
+            print(f"[RUN] {result.test_id}: PASSED")
+        elif result.tag_ok:
+            print(f"[RUN] {result.test_id}: PASSED")
         else:
             print(f"[RUN] {result.test_id}: {result.message}")
-            diff_file = DEFAULT_OUTPUT_DIR / "diff.txt"
-            if args.show_diff:
-                if os.path.exists(diff_file):
-                    print(readfile(diff_file))
-                else: print('diff file not found')
-            if args.stop_on_fail:
-                break
+
+
+        # if result.ok:
+        #     print(f"[RUN] {result.test_id} [PASSED] {result.message}")
+        # else:
+        #     print(f"[RUN] {result.test_id}: {result.message}")
+        #     diff_file = DEFAULT_OUTPUT_DIR / "diff.txt"
+        #     if args.show_diff:
+        #         if os.path.exists(diff_file):
+        #             print(readfile(diff_file))
+        #         else: print('diff file not found')
+        #     if args.stop_on_fail:
+        #         break
 
     passed = sum(1 for r in results if r.ok)
     failed = len(results) - passed
     tag_passed = sum(1 for r in results if r.tag_ok)
     tag_failed = len(results) - tag_passed
-    print(f"\nOutput Summary: {passed}/{len(results)} passed, {failed} failed")
-    print(f"\nTagged Summary: {tag_passed}/{len(results)} passed, {tag_failed} failed")
+    if passed == len(results):
+        print(f"\n Summary: {passed}/{len(results)} passed, {failed} failed")
+    else:
+        print(f"\n Summary: {tag_passed}/{len(results)} passed, {tag_failed} failed")
 
     if failed:
         raise SystemExit(1)

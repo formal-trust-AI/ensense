@@ -1,0 +1,30 @@
+Win Rates for Dataset: diabetes
+========================================
+
+--- Pairwise L2 Norm Win Rates ---
+pca_only: 66.0%
+pca_clause: 61.3%
+pca_prob: 51.3%
+pca_prob_clause: 50.0%
+clause: 34.0%
+plain: 32.0%
+prob: 24.0%
+
+--- Mean Centroid L1 Win Rates ---
+pca_clause: 86.0%
+pca_only: 68.0%
+clause: 54.7%
+pca_prob_clause: 52.7%
+pca_prob: 42.7%
+plain: 36.0%
+prob: 6.0%
+
+--- Mean Centroid L2 Win Rates ---
+pca_clause: 89.3%
+pca_only: 66.7%
+clause: 56.0%
+pca_prob_clause: 50.0%
+pca_prob: 42.0%
+plain: 34.0%
+prob: 7.3%
+

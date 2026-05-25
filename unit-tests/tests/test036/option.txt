@@ -1,0 +1,1 @@
+./src/sensitive.py models/tree_verification_models/ori_mnist_unrobust/0200.resaved.json --features 1 10 113 245 355 478 647 718 --timeout 200 --details models/dataset/ori_mnist/ori_mnist_details.csv --all_opt --output_gap 0.4 0.6 --solver milp --multiclass --truelabel 0 --otherlabel 1 --max_tree 100

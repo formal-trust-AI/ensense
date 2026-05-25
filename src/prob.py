@@ -186,7 +186,7 @@ def createprobs(model, X, y,round_digit):
         guard[feat_name(i)] = [np.inf]
     for idx, row in trees.iterrows():
         if row["Feature"] != "Leaf":
-            guard[row["Feature"]].append(round(row["Split"],round_digit))
+            guard[row["Feature"]].append(row["Split"])
     for i in range(n_features):
         guard[feat_name(i)] = sort_filter(guard[feat_name(i)])
 

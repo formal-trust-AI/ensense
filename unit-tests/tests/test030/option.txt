@@ -1,0 +1,1 @@
+./src/sensitive.py models/tree_verification_models/fashion_robust/0200.resaved.json --features 25 --timeout 200 --details models/dataset/fashion/fashion_details.csv --all_opt --output_gap 0.4 0.6 --solver milp --multiclass --truelabel 0 --otherlabel 1

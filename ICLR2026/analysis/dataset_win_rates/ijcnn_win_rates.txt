@@ -1,0 +1,30 @@
+Win Rates for Dataset: ijcnn
+========================================
+
+--- Pairwise L2 Norm Win Rates ---
+prob: 70.6%
+plain: 51.6%
+pca_prob: 48.8%
+clause: 47.6%
+pca_prob_clause: 46.2%
+pca_only: 30.8%
+pca_clause: 26.9%
+
+--- Mean Centroid L1 Win Rates ---
+pca_prob_clause: 75.4%
+pca_prob: 71.7%
+pca_clause: 62.5%
+prob: 55.8%
+pca_only: 39.8%
+clause: 39.4%
+plain: 5.4%
+
+--- Mean Centroid L2 Win Rates ---
+pca_clause: 70.0%
+pca_prob: 62.3%
+pca_prob_clause: 61.2%
+clause: 51.4%
+prob: 51.2%
+pca_only: 47.4%
+plain: 6.5%
+

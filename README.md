@@ -1,3 +1,7 @@
+# Ensense
+
+A tool for sensitivity analysis of tree ensemble models. The tool supports XGBoost, Random forest, and LGBM models. 
+
 ## Installations
 
 
@@ -33,7 +37,7 @@ python ./src/sensitive.py <model file> --solver <solvername> --output_gap <int p
 
 Sample commands:
 
-## pseudo-Boolean (pb) tool from [SENSITIVITY VERIFICATION FOR ADDITIVE DECISION TREE ENSEMBLES](https://openreview.net/pdf?id=h0vC0fm1q7)
+## Running pseudo-Boolean (pb) tool from [SENSITIVITY VERIFICATION FOR ADDITIVE DECISION TREE ENSEMBLES](https://openreview.net/pdf?id=h0vC0fm1q7)
 ```
 python ./src/sensitive.py models/tree_verification_models/breast_cancer_robust/0004.resaved.json --features 2 5
 python ./src/sensitive.py models/tree_verification_models/breast_cancer_robust/0004.resaved.json --features 2 5 --output_gap 0.2 0.8 --precision 400 --timeout 100 
@@ -41,12 +45,22 @@ python ./src/sensitive.py models/tree_verification_models/breast_cancer_robust/0
 python ./src/sensitive.py models/tree_verification_models/breast_cancer_robust/0004.resaved.json --features 2 5 --output_gap 0.2 0.8 --precision 400 --timeout 100 --details models/dataset/breast_cancer/breast_cancer_details.csv --solver pb
 ```
 
-## kant (self implementation) of [Evasion and Hardening of Tree Ensemble Classifiers](https://arxiv.org/abs/1509.07892)
+## Running our implementation of [Evasion and Hardening of Tree Ensemble Classifiers](https://arxiv.org/abs/1509.07892)
+
 ```
 python ./src/sensitive.py models/tree_verification_models/breast_cancer_robust/0004.resaved.json --features 2 5 --output_gap 0.2 0.8 --precision 400 --timeout 100 --details models/dataset/breast_cancer/breast_cancer_details.csv --solver milp
 ```
+## Ensense tool from [DataAware and Scalable Sensitivity Analysis for Decision Tree Ensembles](https://arxiv.org/abs/2602.07453)
 
-## svim tool from [DataAware and Scalable Sensitivity Analysis for Decision Tree Ensembles](https://arxiv.org/abs/2602.07453)
+### Authors
+
+Ensense was developed by:
+- Namrita Varshney
+- Ashutosh Gupta
+- Arhaan Ahmad
+- Tanay V. Tayal
+- S. Akshay
+
 ```
 python ./src/sensitive.py models/tree_verification_models/breast_cancer_robust/0004.resaved.json --features 2 5 --output_gap 0.2 0.8 --precision 400 --timeout 100 --details models/dataset/breast_cancer/breast_cancer_details.csv --solver pb --all_opt
 python ./src/sensitive.py models/tree_verification_models/breast_cancer_robust/0004.resaved.json --features 2 5 --output_gap 0.2 0.8 --precision 400 --timeout 100 --details models/dataset/breast_cancer/breast_cancer_details.csv --solver pb --all_opt --prob  

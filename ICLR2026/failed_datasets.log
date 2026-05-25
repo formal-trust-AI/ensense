@@ -1,0 +1,6 @@
+[covtype_robust] Missing detail file: /home/jaladhij/snap/snapd-desktop-integration/361/rnd/xgboost/models/dataset/covtype/covtype_details.csv
+[covtype_unrobust] Missing detail file: /home/jaladhij/snap/snapd-desktop-integration/361/rnd/xgboost/models/dataset/covtype/covtype_details.csv
+[fashion_robust] Missing detail file: /home/jaladhij/snap/snapd-desktop-integration/361/rnd/xgboost/models/dataset/fashion/fashion_details.csv
+[fashion_unrobust] Missing detail file: /home/jaladhij/snap/snapd-desktop-integration/361/rnd/xgboost/models/dataset/fashion/fashion_details.csv
+[ori_mnist_robust] Missing detail file: /home/jaladhij/snap/snapd-desktop-integration/361/rnd/xgboost/models/dataset/ori_mnist/ori_mnist_details.csv
+[ori_mnist_unrobust] Missing detail file: /home/jaladhij/snap/snapd-desktop-integration/361/rnd/xgboost/models/dataset/ori_mnist/ori_mnist_details.csv

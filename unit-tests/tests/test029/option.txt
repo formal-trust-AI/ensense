@@ -1,0 +1,1 @@
+./src/sensitive.py models/tree_verification_models/covtype_unrobust/0080.resaved.json --features 2 11 21 --timeout 200 --details models/dataset/covtype/covtype_details.csv --all_opt --output_gap 0.4 0.6 --solver milp --multiclass --truelabel 0 --otherlabel 1

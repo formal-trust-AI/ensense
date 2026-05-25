@@ -13,6 +13,11 @@ import copy
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import xgboost as xgb
+from ensemble import Interval
+
+from joblib import Parallel, delayed
+import tqdm
+
 
 def dump_solver(solver, filename):
     smt2 = solver.sexpr()
@@ -24,6 +29,7 @@ def dump_solver(solver, filename):
 def solve(phi):
     tic = time.perf_counter()
     s = z3.Solver()
+    s.set("random_seed", SEED)
     s.add(phi)
     r = s.check()
     toc = time.perf_counter()
@@ -117,7 +123,7 @@ def search_anomaly_for_features(
         utils.print_info( "center value", base_val)
         utils.print_info( "lower gap"   , options.lgap)
         utils.print_info( "upper gap"   , options.ugap)
-        
+    
     lgap = int(options.lgap * precision)
     ugap = int(options.ugap * precision)
     
@@ -254,6 +260,46 @@ def search_anomaly_for_features(
             cons.append(lit_cons)
 
         return z3.Or(cons)
+    
+    # ---------------------------
+    # Helpers: subtree ranges & sensitivity
+    # ---------------------------
+    def compute_subtree_ranges(trees, precision):
+        """
+        Build rangemap: node ID → (min_leaf_value, max_leaf_value) for its
+        subtree.  Single pass over the DataFrame in reverse order (children
+        before parents) — O(n), no recursion, no repeated scans.
+        """
+        # Pre-extract columns as numpy arrays for fast access
+        ids      = trees["ID"].values
+        features = trees["Feature"].values
+        gains    = trees["Gain"].values
+        yes_ids  = trees["Yes"].values
+        no_ids   = trees["No"].values
+        n        = len(ids)
+
+        rangemap = {}
+        # Reverse iteration: tree dumps are BFS/pre-order so children
+        # always appear after their parent → reverse guarantees every
+        # child is processed before its parent.
+        for i in range(n - 1, -1, -1):
+            nid = ids[i]
+            if features[i] == "Leaf":
+                g = gains[i]
+                rangemap[nid] = (
+                    int(math.floor(g * precision)),
+                    int(math.ceil(g * precision)),
+                )
+            else:
+                y = yes_ids[i]
+                n_ = no_ids[i]
+                ymin, ymax = rangemap.get(y, (0, 0))
+                nmin, nmax = rangemap.get(n_, (0, 0))
+                rangemap[nid] = (
+                    ymin if ymin < nmin else nmin,
+                    ymax if ymax > nmax else nmax,
+                )
+        return rangemap
 
     def in_distro_clause_cons( sensitive_features, in_distro_clause_file ):
         if in_distro_clause_file:
@@ -431,16 +477,35 @@ def search_anomaly_for_features(
                 if options.ancestor_cons:
                     gen_ancestor_constraints(row, parent, v, cons)
                 if not is_affected_by_change(row, parent):
-                    unaffected.insert(row["ID"])
+                    unaffected.add(row["ID"])
                 # Don't traverse this tree further
                 ignore.append(row["Yes"])
                 ignore.append(row["No"])
             else:
                 cond = get_feature_bit(row["Feature"], row["Split"], vars)
-                cons.append(z3.And(v, cond) == vars[row["Yes"]])
-                cons.append(z3.And(v, z3.Not(cond)) == vars[row["No"]])
-                parent[row["Yes"]] = (row["ID"], cond, int(row["Feature"][1:]))
-                parent[row["No"]] = (row["ID"], z3.Not(cond), int(row["Feature"][1:]))
+                if cond is True:
+                    if options.debug:
+                        print("NODE", row["ID"], "forced YES ->", row["Yes"])
+                    cons.append(vars[row["Yes"]] == v)
+                    parent[row["Yes"]] = (row["ID"], True, int(row["Feature"][1:]))
+                    ignore.append(row["No"])
+
+                # -------- forced FALSE split --------
+                elif cond is False:
+                    if options.debug:
+                        print("NODE", row["ID"], "forced NO ->", row["No"])
+                    cons.append(vars[row["No"]] == v)
+                    parent[row["No"]] = (row["ID"], True, int(row["Feature"][1:]))
+                    ignore.append(row["Yes"])
+
+                # -------- normal symbolic split --------
+                else:
+                    if options.debug:
+                        print("NODE", row["ID"], "symbolic split")
+                    cons.append(z3.And(v, cond) == vars[row["Yes"]])
+                    cons.append(z3.And(v, z3.Not(cond)) == vars[row["No"]])
+                    parent[row["Yes"]] = (row["ID"], cond, int(row["Feature"][1:]))
+                    parent[row["No"]] = (row["ID"], z3.Not(cond), int(row["Feature"][1:]))
 
         cons += [vars[f"{tid}-{ensemble.get_root_name()}"] for tid in range(n_trees)]  # Root nodes are true
         all_leaves = []
@@ -466,7 +531,8 @@ def search_anomaly_for_features(
 
         
     model = ExtendedBooster(model)
-    stop = lambda x, y: False
+    rangemap = compute_subtree_ranges(trees, precision)
+    stop = lambda row, ran: (ran.get(row["ID"], (0, 0))[1] - ran.get(row["ID"], (0, 0))[0]) < (ugap - lgap) / precision
     model = model.booster
     if options.encoding == "allsum":
         cs1 = gen_cons_tree(trees, vars1, up=True)
@@ -476,10 +542,10 @@ def search_anomaly_for_features(
         prop = [(expr1 > ugap), (expr2 < lgap)]
     else:
         cs1, up_leaves, up_affected, unaffected = gen_pb_cons_tree(
-            trees, vars1, up=True #, rangemap=rangemap, stop=stop
+            trees, vars1, up=True , rangemap=rangemap, stop=stop
         )
         cs2, down_leaves, down_affected, _ = gen_pb_cons_tree(
-            trees, vars2, up=False #, rangemap=rangemap, stop=stop
+            trees, vars2, up=False , rangemap=rangemap, stop=stop
         )
         unchanged = []
         affected_diff = []
@@ -658,10 +724,22 @@ def search_anomaly_for_features(
     if m:
         d1 = []
         d2 = []
+        region1 = []
+        region2 = []
         for idx in range(0, ensemble.n_features):
+            temp = [split_sat_value_map[fname] for fname in split_bit_map[idx]]
             if len(split_bit_map[idx]) == 0:
                 v1 = split_sat_value_map[f"f{idx}_Last"]
                 v2 = split_sat_value_map[f"f{idx}_Last"]
+                region1.append(Interval(
+                                '(',
+                                v1,
+                                op_range_list[idx][1],
+                                ')'))#(v1,ensemble.op_range_list[idx][1])
+                region2.append(Interval('(',
+                                v2,
+                                op_range_list[idx][1],
+                                ')'))#(v1,ensemble.op_range_list[idx][1])
             else:
                 v1 = f"f{idx}_Last"
                 next_v1 = f"f{idx}_Last"
@@ -669,6 +747,7 @@ def search_anomaly_for_features(
                 for fname in split_bit_map[idx]:
                     if breaknext:
                         next_v1 = fname
+                        
                         break
                     if options.solver == "pb" or options.solver == "naive_smt":
                         cond = z3.is_true(m[vars1[fname]])
@@ -677,12 +756,26 @@ def search_anomaly_for_features(
                     if cond:
                         v1 = fname
                         breaknext = True
+
+                if v1 == f"f{idx}_Last": 
+                    region1.append(Interval('[',
+                                    split_sat_value_map[v1],
+                                    op_range_list[idx][1],
+                                    ')')) #(split_sat_value_map[v1],ensemble.op_range_list[idx][1])
+                else:
+                    region1.append(Interval(
+                                    '[',
+                                    split_sat_value_map[v1],
+                                    split_sat_value_map[next_v1],
+                                    ')')) #(split_sat_value_map[v1],split_sat_value_map[next_v1])
+                
                 v2 = f"f{idx}_Last"
                 next_v2 = f"f{idx}_Last"
                 breaknext = False
                 for fname in split_bit_map[idx]:
                     if breaknext:
                         next_v2 = fname
+                        
                         break
                     if options.solver == "pb" or options.solver == "naive_smt":
                         cond = z3.is_true(m[vars2[fname]])
@@ -691,14 +784,26 @@ def search_anomaly_for_features(
                     if cond:
                         v2 = fname
                         breaknext = True
+                if v2 == f"f{idx}_Last":
+                    region2.append(Interval('[',
+                                            split_sat_value_map[v2],
+                                            op_range_list[idx][1],
+                                            ')')) #(split_sat_value_map[v2],ensemble.op_range_list[idx][1])
+                else:
+                    region2.append(Interval(
+                                    '[',
+                                    split_sat_value_map[v2],
+                                    split_sat_value_map[next_v2],
+                                    ')')) #(split_sat_value_map[v2],split_sat_value_map[next_v2])
                 v1 = split_sat_value_map[v1]
                 v2 = split_sat_value_map[v2]
             d1.append(v1)
             d2.append(v2)
         
-        return [d1, d2], solvingtime
+        return [d1, d2], solvingtime, [region1,region2]
+        # return [d1, d2], solvingtime
     else:
-        return None, solvingtime
+        return None, solvingtime, None
 
 
 def pb_solver( options ):
@@ -708,7 +813,7 @@ def pb_solver( options ):
     # ----------------------
     # close = options.close
 
-
+        
     #---------------------------------------
     # Load model
     #---------------------------------------
@@ -720,15 +825,14 @@ def pb_solver( options ):
     debug               = options.debug
     local_check_samples = options.local_check_samples
     
-                
-    print('# Running the solver with precision level:', options.precision)
+    utils.print_verbose(options,-1,f'Running the solver with precision level:', options.precision)
 
     # --------------------------------------
     # Configure sensitive features
     # --------------------------------------
     features = options.features
-    if options.all_features: features = [i for i in range(e.n_features)]
-    if features is None: features = [0]    
+    # if options.all_features: features = [i for i in range(e.n_features)]
+    # if features is None: features = [0]    
 
     
     op_range_list2=[]
@@ -748,8 +852,8 @@ def pb_solver( options ):
                 op_range_list2.append(op_range_list[i])
         return op_range_list2
 
-    def runner(i,tupl):
-        print(f"Query {i}:")
+    def runner(i,n,tupl):
+        utils.print_verbose(options, -1, "--==> Query", f"{i+1}/{n}")
         f = tupl[0]
         precision = tupl[1]
         op_range_list = tupl[2]
@@ -761,7 +865,7 @@ def pb_solver( options ):
         # signal.alarm(options.timeout)
         # if True:
         try:
-            result, solvingtime = search_anomaly_for_features(
+            pair_point, solvingtime, region_pair = search_anomaly_for_features(
                 e,
                 f,
                 precision,
@@ -775,19 +879,28 @@ def pb_solver( options ):
                 e.feature_names,
                 options
             )
-            utils.print_info('Time:', solvingtime)
+            # utils.print_info('Time:', solvingtime)
         except Exception as err:
-            print(err)
-            print(f, "Insensitive")
-            print(f"Time {(time.time() - start_time)} seconds")
-            return
-        
-        if result != None:
+            utils.print_verbose(options,0,"Error:",err)
+            utils.print_verbose(options, -1, f"Insensitive", f)
+            utils.print_verbose(options, -1, "Time", f"{(time.time() - start_time)} seconds")
+            return False
+        timetaken = time.time() - start_time
+        if region_pair != None:
+            utils.print_verbose(options,0,"region1",e.print_reg(region_pair[0]))
+            utils.print_verbose(options,0,"region2",e.print_reg(region_pair[1]))
+            point1 = e.region2point(region_pair[0])
+            point2 = e.region2point(region_pair[1])
+            result = [point1, point2]
             vals = e.predict(result)
+            assert (vals[0] < 0.5) != (vals[1] < 0.5), "Error: both counter examples belong to the same class"
+            # print(f"********************************")
             result_copy = result[0].copy()
             result_copy_2=copy.deepcopy(result)
             
-            print('Sensitive:', f)
+            utils.print_verbose(options,-1,'Sensitive', f)
+            utils.print_verbose(options,-1,'Time', timetaken)
+            # print(f"Time {(time.time() - start_time)} seconds")
             if False:
                 for x in f:
                     result[0][x] = (result[0][x], result[1][x])
@@ -804,10 +917,12 @@ def pb_solver( options ):
                     # result[1][x] = f"\033[91m{result[1][x]}\033[0m" 
                     result[0][x] = f"{result[0][x]}"  
                     result[1][x] = f"{result[1][x]}" 
-                utils.print_array( 'Sensitive sample 1:', result[0])
-                utils.print_array( 'Sensitive sample 2:', result[1])
                 
-            print('Output values:',vals)
+                
+                utils.print_array_verbose( options, -1, 'Sensitive sample 1:', result[0])
+                utils.print_array_verbose( options, -1, 'Sensitive sample 2:', result[1])
+                
+            utils.print_verbose(options,-1,'Output values:',vals)
 
             output2=[]
 
@@ -822,14 +937,21 @@ def pb_solver( options ):
 
             if options.plot:
                 plot_variations(model, result_copy, f, trees, feature_names, op_range_list)
+            return True
         else:
-            print("Insensitive", f)
+            utils.print_verbose(options,-1,"Insensitive", f)
+            utils.print_verbose(options,-1,'Time', timetaken)
+            return False
+        
+    sense_sets = [features]
+    if options.all_single: sense_sets = [ [f] for f in range(0, e.n_features) ]
+    
+    # if options.all_single:
+    #     tasks = [([f], options.precision, op_range_list) for f in range(0, e.n_features)]
+    # else:
+    #     tasks = [(features, options.precision, op_range_list)]
 
-    if options.all_single:
-        tasks = [([f], options.precision, op_range_list) for f in range(0, n_features)]
-    else:
-        tasks = [(features, options.precision, op_range_list)]
-
+    tasks = [ (fs, options.precision, op_range_list) for fs in sense_sets]
 
     if options.local_check_samples:
         if len(options.local_check_samples) == 0 or len(op_range_list) != len(options.local_check_samples[0]):
@@ -838,12 +960,23 @@ def pb_solver( options ):
         tasks = []
         for sample in options.local_check_samples:
             op_range_list2 = local_check_update_range( sample, op_range_list )
-            tasks.append((features, options.precision, op_range_list2))
+            for fs in sense_sets:
+                tasks.append((fs, options.precision, op_range_list2))
+            # if options.all_single:
+            #     for f in range(0, e.n_features):
+            #         tasks.append(([f], options.precision, op_range_list2))
+            # else:
+            #     tasks.append((features, options.precision, op_range_list2))
+        utils.print_verbose(options,-1,"Number of queries:", f" {len(sense_sets)}x {len(options.local_check_samples)}={len(tasks)}")
+
 
             
-    # if debug:
-    results = [runner(i,params) for i,params in enumerate(tasks)]
-    # else:
-    # results = Parallel(n_jobs=-1)( delayed(runner)(params) for params in tqdm(tasks) )
+    if True: #len(tasks) < 5:
+        results = [runner(i,len(tasks),params) for i,params in enumerate(tasks)]
+    else:
+        options.verbosity = options.verbosity-1
+        results = Parallel(n_jobs=-1)( delayed(runner)(i,params) for i,params in enumerate(tqdm.tqdm(tasks)) )
+        options.verbosity += 1
+    utils.print_verbose( options, -1, "Fraction of sensitive queries:", f"{sum(results)}/{len(results)}")
     # except multiprocessing.context.TimeoutError as e:
     #     print(f"Insensitive: {e}")

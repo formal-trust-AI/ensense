@@ -10,7 +10,11 @@ import io
 
 def print_info( what, data ):
     print(f"# {what} : {data}")
-   
+
+def print_verbose( options, level, what, data ):
+    if(options.verbosity > level):
+        print_info(what,data)
+
 def sigmoid(x):
     return 1 / (1 + math.exp(-x))
 def sigmoid_inv(y):
@@ -98,9 +102,8 @@ def model_details_file(n_features, details_fname):
     feature_names = {} #[""] * n_features
     op_range_list = [(-1000000,10000000)] * n_features
     for index, row in details.iterrows():
-        i = row["feature"]
+        i = int(row["feature"])
         feature_names[i] = str(row["name"])
-        # print(f"feature_name :{feature_names[i]}")
         op_range_list[i] = (row["lb"], row["ub"])
     return feature_names, op_range_list
 
@@ -111,8 +114,10 @@ def print_array( leading_text, a ):
     if(len(a) > 0 ): print(a[0],end=" ")
     for v in a[1:] : print(",",v,end=" ")
     print("]")
-        
-    
+
+def print_array_verbose( options, level, leading_text, a ):
+    if(options.verbosity > level):
+        print_array( "# " + leading_text, a )
 
 # def sigmoid_inv(x):
 #     return -np.log(1 / x - 1)

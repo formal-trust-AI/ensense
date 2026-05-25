@@ -1,31 +1,33 @@
 ## Code built on top of the work done in https://github.com/chenhongge/RobustTrees/blob/master/xgbKantchelianAttack.py
 
 import ensemble
-
 import pprint
-from joblib import Parallel, delayed
-import pdb
 from gurobipy import *
 from sklearn.datasets import load_svmlight_file
 from scipy import sparse
 import numpy as np
 import json
-import math
 import random
 import os
-import xgboost as xgb
 import time
-import argparse
-from utils import model_files, open_model, sigmoid, sigmoid_inv
-import pickle
+from utils import print_info,print_verbose
 from prob import *
 import utils
 import ast
 import data_distance
+import numpy as np
+from ensemble import Interval
+import importlib.util
+from pathlib import Path
+from pca_constraint import compute_pca_params, evaluate_pca_row_values
+# _PCA_PATH = Path(__file__).resolve().parents[1] / "utils" / "pca_constraint.py"
+# _PCA_SPEC = importlib.util.spec_from_file_location("pca_constraint", _PCA_PATH)
+# _PCA_MOD = importlib.util.module_from_spec(_PCA_SPEC)
+# _PCA_SPEC.loader.exec_module(_PCA_MOD)
+# compute_pca_params = _PCA_MOD.compute_pca_params
+# evaluate_pca_row_values = _PCA_MOD.evaluate_pca_row_values
 
 ROUND_DIGITS = 6
-
-
 
 class node_wrapper(object):
 
@@ -80,52 +82,49 @@ class milpSolver(object):
         self,
         model,
         order=np.inf,
-        guard_val=0.67,
         round_digits=ROUND_DIGITS,
         LP=False,
         binary=True,
         pos_json_input=None,
         neg_json_input=None,
-        varyingFeat=[],
-        debug=False,
-        args={},
         options = None,
     ):
         self.LP = LP
         self.binary = binary or (pos_json_input == None) or (neg_json_input == None)
-        self.debug = debug
-        self.args = args
         self.options = options
         self.n_classes = model.n_classes
         self.multiclass = self.options.multiclass
-        self.strongmulti = self.options.strong_multi
+        #self.strongmulti = self.options.strong_multi
         self.guard_val = (options.ugap-options.lgap)/2 #guard_val
         self.round_digits = round_digits
         self.model = model
         self.base_val = model.get_base_value()
         self.lgap = self.options.lgap
         self.ugap = self.options.ugap
-        
 
         #Dataset
-        if args["prob"]:
-            self.X, self.y = getdatafile(args["data_file"])
+        if self.options.prob:
+            self.X, self.y = getdatafile(self.options.data_file)
             self.pos_mean, self.neg_mean = get_mean(self.X, self.y)
             self.probs, self.guards, self.leaf_data_list = createprobs(model, self.X, self.y,self.round_digits)
         #over
 
         if self.binary:
-            temp = "temporary{}.json".format(str(round(time.time() * 1000))[-4:])
-            model.model.dump_model(temp, dump_format="json")
-            with open(temp) as f:
-                if args["max_trees"] is not None:
-                    self.json_file = json.load(f)[: args["max_trees"] * self.n_classes]
-                else:
-                    self.json_file = json.load(f)
-            if type(self.json_file) is not list:
-                raise ValueError("model input should be a list of dict loaded by json")
-            else:
-                os.remove(temp)
+            tree_json_str = model.model.get_dump(dump_format="json")
+            self.json_file = [json.loads(tree) for tree in tree_json_str]
+            if self.options.max_trees is not None:
+                self.json_file = self.json_file[: self.options.max_trees * self.n_classes]
+            # temp = "temporary{}.json".format(str(round(time.time() * 1000))[-4:])
+            # model.model.dump_model(temp, dump_format="json")
+            # with open(temp) as f:
+            #     if self.options.max_trees is not None:
+            #         self.json_file = json.load(f)[: self.options.max_trees * self.n_classes]
+            #     else:
+            #         self.json_file = json.load(f)
+            # if type(self.json_file) is not list:
+            #     raise ValueError("model input should be a list of dict loaded by json")
+            # else:
+            #     os.remove(temp)
         else:
             self.pos_json_file = pos_json_input
             self.neg_json_file = neg_json_input
@@ -143,7 +142,7 @@ class milpSolver(object):
         self.unaffected_leaves = []
         self.affected_leaves = []
 
-        self.varyingFeat = varyingFeat
+        self.varyingFeat = self.options.features
         if self.varyingFeat is None:
             self.varyingFeat = [0]
 
@@ -170,7 +169,7 @@ class milpSolver(object):
                 if type(attribute) == str:
                     attribute = int(attribute[1:])
 
-                threshold = round(threshold, self.round_digits)
+                # threshold = round(threshold, self.round_digits)
                 # XGBoost can only offer precision up to 8 digits, however, minimum difference between two splits can be smaller than 1e-8
                 # here rounding may be an option, but its hard to choose guard value after rounding
                 # for example, if round to 1e-6, then guard value should be 5e-7, or otherwise may cause mistake
@@ -214,8 +213,9 @@ class milpSolver(object):
 
         up_cons_all = []
         down_cons_all = []
-        if self.args["precision"] == 0:
-            self.args["precise"] = True
+        self.is_precise = False
+        if self.options.precision == 0:
+            self.is_precise = True
         if self.binary:
             for i, tree in enumerate(self.json_file):
 
@@ -223,10 +223,10 @@ class milpSolver(object):
                 new_leaves = self.leaf_v_list[self.leaf_count[-1] :]
                 up_cons = {}
                 down_cons = {}
-                if not self.args["precise"]:
+                if not self.is_precise:
                     for idx, leaf in enumerate(new_leaves):
-                        up_val = int(np.ceil(leaf * self.args["precision"]))
-                        down_val = int(np.floor(leaf * self.args["precision"]))
+                        up_val = int(np.ceil(leaf * self.options.precision))
+                        down_val = int(np.floor(leaf * self.options.precision))
                         if up_val not in up_cons.keys():
                             up_cons[up_val] = [self.leaf_count[-1] + idx]
                         else:
@@ -255,7 +255,10 @@ class milpSolver(object):
             ):
                 raise ValueError("leaf count error")
 
-        self.m = Model("attack")
+        self.env = Env(empty=True)
+        self.env.setParam('OutputFlag', 0)
+        self.env.start()
+        self.m = Model("attack",env=self.env)
         self.m.setParam("OutputFlag", 0)
         self.m.setParam("Threads", 1)  #! Number of threads
         self.P = self.m.addVars(len(self.node_list), vtype=GRB.BINARY, name="p")
@@ -317,9 +320,16 @@ class milpSolver(object):
                     name="p_consis_attr{}_{}th_2".format(key, -1),
                 )
 
+        self.x = {}
+        self.x2 = {}
+        self._add_feature_value_variables()
+        self._link_feature_values_to_threshold_bits()
+        if self.options.pca_data:
+            self._add_pca_constraints()
+
         # all leaves sum up to 1
         for i in range(len(self.leaf_count) - 1):
-            if not self.args["precise"]:
+            if not self.is_precise:
                 t = [self.up_vars[i][j] for j in self.up_vars[i]]
                 self.m.addConstr(
                     LinExpr(
@@ -376,8 +386,8 @@ class milpSolver(object):
                 )
 
         if self.options.unaffected_cons:
-            print(f"{len(self.unaffected_leaves)} leaves marked unaffected")
-            print(f"{len(self.llist)} total leaves")
+            print_verbose(self.options, 8, "", f"{len(self.unaffected_leaves)} leaves marked unaffected")
+            print_verbose(self.options, 8, "", f"{len(self.llist)} total leaves")
             for i in self.unaffected_leaves:
                 self.m.addConstr(self.llist[i] == self.llist2[i])
 
@@ -426,12 +436,11 @@ class milpSolver(object):
                         LinExpr([1] * len(right_l2), right_l2) + p2 <= 1,
                         name="p{}_right_{}_2".format(j, k),
                     )
-        if self.args["in_distro_clauses"]:
+        if self.options.in_distro_clauses_file:
             featureDict = self.model.feature_names
             print("featureDict", featureDict)
             revFeatureDict = {v: k for k, v in featureDict.items()}
-            in_distro_clause_file = self.args["in_distro_clauses"]
-            ofile = open(in_distro_clause_file, "r")
+            ofile = open(self.options.in_distro_clauses_file, "r")
             clauses = ofile.readlines()
   
                 
@@ -439,7 +448,107 @@ class milpSolver(object):
             for clause in clauses:
                 self.add_clause_cons(clause,revFeatureDict)
         self.m.update()
-    
+
+    def _feature_bounds(self, feature_idx):
+        low, high = self.model.op_range_list[feature_idx]
+        if np.isnan(low) or np.isinf(low):
+            low = 0.0
+        if np.isnan(high) or np.isinf(high):
+            high = 1.0
+        return float(low), float(high)
+
+    def _add_feature_value_variables(self):
+        for feature_idx in range(self.model.n_features):
+            low, high = self._feature_bounds(feature_idx)
+            self.x[feature_idx] = self.m.addVar(
+                lb=low, ub=high, vtype=GRB.CONTINUOUS, name=f"x_{feature_idx}"
+            )
+            self.x2[feature_idx] = self.m.addVar(
+                lb=low, ub=high, vtype=GRB.CONTINUOUS, name=f"x2_{feature_idx}"
+            )
+
+    def _link_one_feature_to_threshold_bits(self, feature_idx, x_var, p_index):
+        if feature_idx not in self.pdict:
+            return
+
+        low, high = self._feature_bounds(feature_idx)
+        span = high - low
+        if span <= 0:
+            span = 1.0
+
+        for threshold, p_var, p_var2 in self.pdict[feature_idx]:
+            bit_var = p_var if p_index == 1 else p_var2
+            self.m.addConstr(
+                x_var <= threshold + span * (1 - bit_var),
+                name=f"x_le_th_f{feature_idx}_{threshold}_{p_index}",
+            )
+            self.m.addConstr(
+                x_var >= threshold - span * bit_var,
+                name=f"x_ge_th_f{feature_idx}_{threshold}_{p_index}",
+            )
+
+    def _link_feature_values_to_threshold_bits(self):
+        for feature_idx in range(self.model.n_features):
+            self._link_one_feature_to_threshold_bits(feature_idx, self.x[feature_idx], 1)
+            self._link_one_feature_to_threshold_bits(feature_idx, self.x2[feature_idx], 2)
+
+    def _add_pca_constraints(self):
+        pca = compute_pca_params(
+            csv_path=self.options.pca_data,
+            center=True,
+            verbose=(self.options.verbosity > 0),
+        )
+
+        ImP = pca["ImP"]
+        eps = float(pca["epsilon"])
+        print("eps for PCA constraints:", eps)
+        mean = pca["mean"]
+        feature_names = pca["feature_names"]
+
+        feature_indices = []
+        for fname in feature_names:
+            if isinstance(fname, str) and fname.startswith("f"):
+                feature_idx = int(fname[1:])
+            elif isinstance(fname, str) and fname.isdigit():
+                feature_idx = int(fname)
+            else:
+                raise ValueError(f"Unsupported PCA feature name: {fname}")
+            if feature_idx < 0 or feature_idx >= self.model.n_features:
+                raise ValueError(f"PCA feature {fname} is outside model range")
+            feature_indices.append(feature_idx)
+
+        for row in range(len(feature_indices)):
+            expr1 = LinExpr()
+            expr2 = LinExpr()
+            for col in range(len(feature_indices)):
+                coeff = float(ImP[row][col])
+                feature_idx = feature_indices[col]
+                expr1 += coeff * (self.x[feature_idx] - float(mean[col]))
+                expr2 += coeff * (self.x2[feature_idx] - float(mean[col]))
+
+            self.m.addConstr(
+                expr1 <= eps,
+                name=f"pca_up_row_{row}",
+            )
+            self.m.addConstr(
+                expr1 >= -eps,
+                name=f"pca_low_row_{row}",
+            )
+            self.m.addConstr(
+                expr2 <= eps,
+                name=f"pca_up_row2_{row}",
+            )
+            self.m.addConstr(
+                expr2 >= -eps,
+                name=f"pca_low_row2_{row}",
+            )
+
+        print_verbose(
+            self.options,
+            0,
+            "[PCA-MILP]",
+            f"Added {4 * len(feature_indices)} PCA constraints over mapped features {feature_indices}",
+        )
     
     
     def add_clause_cons(self, clause,revFeatureDict):
@@ -478,46 +587,26 @@ class milpSolver(object):
                 name=f"clause_cons_{hash(str(clause))}",
             )
 
-                    
-    # def compute_distance(self,result, data_file):  
-    #     if not os.path.exists(data_file):
-    #         print(f"Data file {data_file} does not exist.")
-    #         return 
-    #     data = pd.read_csv(data_file,nrows=10000)
-    #     n_features = self.model[3]
-    #     trees = self.model[1]
-    #     sensitive_features = self.varyingFeat
-    #     feature_list = [""]*n_features
-    #     featurenames = self.model[6]
-    #     for k in range(len(featurenames)):
-    #         feature_list[k] = featurenames[k]
-    #     missing_cols = [col for col in feature_list if col not in data.columns]
-    #     for col in missing_cols: 
-    #         missing_indices = feature_list.index(col)
-    #         data[missing_cols] = result[0][missing_indices]
-    #     data = data[feature_list]
-    #     dist_type = "SegmentL1"
-    #     # dist_type = "L2"
-    #     if dist_type == "SegmentL1":
-    #         segments = utils.feature_segments(trees,n_features)
-    #         utils.data_distance( data, result[0], sensitive_features, segments=segments, dist_type="SegmentL1" )
-    #     else:
-    #         utils.data_distance( data, result[0], sensitive_features, dist_type=dist_type) 
-            
+    def local_check_update_range(self,sample, op_range_list):
+        op_range_list2=[]
+        for i in range(0, self.model.n_features):
+            if  (i in self.varyingFeat):
+                op_range_list2.append(op_range_list[i])
+                continue
+            list_item=(sample[i]-self.options.perturb,sample[i]+self.options.perturb)
+            if math.isnan(op_range_list[i][0]) or math.isnan(op_range_list[i][1]):
+                op_range_list2.append(list_item)
+            elif max(list_item[0],op_range_list[i][0])<=min(list_item[1],op_range_list[i][1]):
+                list_item2=(max(list_item[0],op_range_list[i][0]),min(list_item[1],op_range_list[i][1]))
+                op_range_list2.append(list_item2)
+            else:
+                op_range_list2.append(op_range_list[i])
+        return op_range_list2
     
-
+                    
     def attack(self,options):
-
-        print("\n==================================")
-        # if self.args["in_distro_clauses"]:
-        #     featureDict = self.model[6]
-        #     revFeatureDict = {v: k for k, v in featureDict.items()}
-        #     in_distro_clause_file = self.args["in_distro_clauses"]
-        #     ofile = open(in_distro_clause_file, "r")
-        #     clauses = ofile.readlines()
-        #     clauses = [ ast.literal_eval(clause) for clause in clauses]
-        #     for clause in clauses:
-        #         self.add_clause_cons(clause,revFeatureDict)
+        print_verbose( self.options, 5, "", "Starting to solve" )
+        # print("\n==================================")
 
 
         if self.options.affected_cons:
@@ -525,21 +614,21 @@ class milpSolver(object):
                 class_lists = []
                 for i in range(self.n_classes):
                     class_lists.append(np.array(self.leaf_class_list) == i)
-                if self.args["truelabel"] == -1:
+                if self.options.truelabel == -1:
                     pass
                 else:
-                    if self.args["otherlabel"] == -1:
+                    if self.options.otherlabel == -1:
                         pass
                     else:
                         if len(self.affected_leaves) > 0: 
-                            print("Applying Affected cons")
+                            print_verbose( self.options, 7, "", "Applying Affected cons" )
                             valid_true = np.array(self.affected_leaves)[
-                                np.array(class_lists[self.args["truelabel"]])[
+                                np.array(class_lists[self.options.truelabel])[
                                     self.affected_leaves
                                 ]
                             ]
                             valid_other = np.array(self.affected_leaves)[
-                                np.array(class_lists[self.args["otherlabel"]])[
+                                np.array(class_lists[self.options.otherlabel])[
                                     self.affected_leaves
                                 ]
                             ]
@@ -565,7 +654,7 @@ class milpSolver(object):
                             )
 
             else:
-                print("Applying Affected cons")
+                print_verbose( self.options, 7, "", "Applying Affected cons" )
                 if len(self.affected_leaves) > 0:
                     self.m.addConstr(
                         LinExpr(
@@ -581,7 +670,7 @@ class milpSolver(object):
                     )
         up_weights = self.leaf_v_list
         down_weights = self.leaf_v_list
-        if not args["precise"]:
+        if not self.is_precise:
             all_up_vals = []
             all_up_variables = []
             for d in self.up_vars:
@@ -605,40 +694,40 @@ class milpSolver(object):
                 class_lists = []
                 for i in range(self.n_classes):
                     class_lists.append(np.array(self.leaf_class_list) == i)
-                if self.args["truelabel"] == -1:
+                if self.options.truelabel == -1:
                     pass
                 else:
-                    if self.args["otherlabel"] == -1:
+                    if self.options.otherlabel == -1:
                         pass
                     else:
                         for i in range(self.n_classes):
-                            if i == self.args["truelabel"]:
+                            if i == self.options.truelabel:
                                 continue
                             self.m.addConstr(
                                 LinExpr(
-                                    all_up_vals[class_lists[self.args["truelabel"]]],
+                                    all_up_vals[class_lists[self.options.truelabel]],
                                     all_up_variables[
-                                        class_lists[self.args["truelabel"]]
+                                        class_lists[self.options.truelabel]
                                     ],
                                 )
                                 - LinExpr(
                                     all_up_vals[class_lists[i]],
                                     all_up_variables[class_lists[i]],
                                 )
-                                >= (self.ugap-self.lgap) * self.args["precision"],
+                                >= (self.ugap-self.lgap) * self.options.precision,
                                 name=f"mislabel_{i}",
                             )
                         for i in range(self.n_classes):
-                            if i == self.args["otherlabel"]:
+                            if i == self.options.otherlabel:
                                 continue
-                            if self.args["strong_multi"] or i == self.args["truelabel"]:
+                            if self.options.strong_multi or i == self.options.truelabel:
                                 self.m.addConstr(
                                     LinExpr(
                                         all_down_vals[
-                                            class_lists[self.args["otherlabel"]]
+                                            class_lists[self.options.otherlabel]
                                         ],
                                         all_down_variables[
-                                            class_lists[self.args["otherlabel"]]
+                                            class_lists[self.options.otherlabel]
                                         ],
                                     )
                                     - LinExpr(
@@ -652,10 +741,10 @@ class milpSolver(object):
                                 self.m.addConstr(
                                     LinExpr(
                                         all_down_vals[
-                                            class_lists[self.args["otherlabel"]]
+                                            class_lists[self.options.otherlabel]
                                         ],
                                         all_down_variables[
-                                            class_lists[self.args["otherlabel"]]
+                                            class_lists[self.options.otherlabel]
                                         ],
                                     )
                                     - LinExpr(
@@ -666,17 +755,17 @@ class milpSolver(object):
                                     name=f"mislabel2_{i}",
                                 )
 
-                        if args["objective"]:
+                        if self.options.objective:
                             self.m.setObjective(
                                 LinExpr(
-                                    all_up_vals[class_lists[self.args["truelabel"]]],
+                                    all_up_vals[class_lists[self.options.truelabel]],
                                     all_up_variables[
-                                        class_lists[self.args["truelabel"]]
+                                        class_lists[self.options.truelabel]
                                     ],
                                 )
                                 - LinExpr(
-                                    all[class_lists[self.args["otherlabel"]]],
-                                    self.llist2[class_lists[self.args["otherlabel"]]],
+                                    all[class_lists[self.options.otherlabel]],
+                                    self.llist2[class_lists[self.options.otherlabel]],
                                 ),
                                 GRB.MAXIMIZE,
                             )
@@ -686,15 +775,15 @@ class milpSolver(object):
                 #--------------------------
                 self.m.addConstr(
                     LinExpr(all_up_vals, all_up_variables) + self.base_val
-                    >= self.ugap * self.args["precision"], # self.guard_val
+                    >= self.ugap * self.options.precision, # self.guard_val
                     name="mislabel",
                 )
                 self.m.addConstr(
                     LinExpr(all_down_vals, all_down_variables) + self.base_val
-                    <=  self.lgap * self.args["precision"], #-self.guard_val
+                    <=  self.lgap * self.options.precision, #-self.guard_val
                     name="mislabel-2",
                 )
-                if args["objective"]:
+                if self.options.objective:
                     self.m.setObjective(
                         LinExpr(all_up_vals, all_up_variables)
                         - LinExpr(all_down_vals, all_down_variables),
@@ -713,19 +802,19 @@ class milpSolver(object):
                 for i in range(self.n_classes):
                     class_lists.append(np.array(self.leaf_class_list) == i)
 
-                if self.args["truelabel"] == -1:
+                if self.options.truelabel == -1:
                     pass
                 else:
-                    if self.args["otherlabel"] == -1:
+                    if self.options.otherlabel == -1:
                         pass
                     else:
                         for i in range(self.n_classes):
-                            if i == self.args["truelabel"]:
+                            if i == self.options.truelabel:
                                 continue
                             self.m.addConstr(
                                 LinExpr(
-                                    up_weights[class_lists[self.args["truelabel"]]],
-                                    self.llist[class_lists[self.args["truelabel"]]],
+                                    up_weights[class_lists[self.options.truelabel]],
+                                    self.llist[class_lists[self.options.truelabel]],
                                 )
                                 - LinExpr(
                                     up_weights[class_lists[i]],
@@ -735,12 +824,12 @@ class milpSolver(object):
                                 name=f"mislabel_{i}",
                             )
                         for i in range(self.n_classes):
-                            if i == self.args["otherlabel"]:
+                            if i == self.options.otherlabel:
                                 continue
                             self.m.addConstr(
                                 LinExpr(
-                                    down_weights[class_lists[self.args["otherlabel"]]],
-                                    self.llist2[class_lists[self.args["otherlabel"]]],
+                                    down_weights[class_lists[self.options.otherlabel]],
+                                    self.llist2[class_lists[self.options.otherlabel]],
                                 )
                                 - LinExpr(
                                     down_weights[class_lists[i]],
@@ -749,15 +838,14 @@ class milpSolver(object):
                                 >= (self.ugap-self.lgap), #self.guard_val,
                                 name=f"mislabel_{i}",
                             )
-                            print(f"selfguard val {self.guard_val}")
-                            # if self.args["strong_multi"] or i == self.args["truelabel"]:
+                            # if self.options.strong_multi or i == self.options.truelabel:
                             #     self.m.addConstr(
                             #         LinExpr(
                             #             down_weights[
-                            #                 class_lists[self.args["otherlabel"]]
+                            #                 class_lists[self.options.otherlabel]
                             #             ],
                             #             self.llist2[
-                            #                 class_lists[self.args["otherlabel"]]
+                            #                 class_lists[self.options.otherlabel]
                             #             ],
                             #         )
                             #         - LinExpr(
@@ -772,10 +860,10 @@ class milpSolver(object):
                             #     self.m.addConstr(
                             #         LinExpr(
                             #             down_weights[
-                            #                 class_lists[self.args["otherlabel"]]
+                            #                 class_lists[self.options.otherlabel]
                             #             ],
                             #             self.llist2[
-                            #                 class_lists[self.args["otherlabel"]]
+                            #                 class_lists[self.options.otherlabel]
                             #             ],
                             #         )
                             #         - LinExpr(
@@ -786,23 +874,23 @@ class milpSolver(object):
                             #         name=f"mislabel2_{i}",
                             #     )
 
-                        if args["objective"]:
+                        if self.options.objective:
                             self.m.setObjective(
                                 LinExpr(
-                                    up_weights[class_lists[self.args["truelabel"]]],
-                                    self.llist[class_lists[self.args["truelabel"]]],
+                                    up_weights[class_lists[self.options.truelabel]],
+                                    self.llist[class_lists[self.options.truelabel]],
                                 )
                                 - LinExpr(
-                                    down_weights[class_lists[self.args["otherlabel"]]],
-                                    self.llist2[class_lists[self.args["otherlabel"]]],
+                                    down_weights[class_lists[self.options.otherlabel]],
+                                    self.llist2[class_lists[self.options.otherlabel]],
                                 )
                                 - LinExpr(
-                                    down_weights[class_lists[self.args["truelabel"]]],
-                                    self.llist2[class_lists[self.args["truelabel"]]],
+                                    down_weights[class_lists[self.options.truelabel]],
+                                    self.llist2[class_lists[self.options.truelabel]],
                                 )
                                 + LinExpr(
-                                    up_weights[class_lists[self.args["otherlabel"]]],
-                                    self.llist[class_lists[self.args["otherlabel"]]],
+                                    up_weights[class_lists[self.options.otherlabel]],
+                                    self.llist[class_lists[self.options.otherlabel]],
                                 ),
                                 GRB.MAXIMIZE,
                             )
@@ -817,21 +905,23 @@ class milpSolver(object):
                     LinExpr(down_weights, self.llist2) +self.base_val <= self.lgap, #-self.guard_val,
                     name="mislabel-2",
                 )
-                print(f"base_val : {self.base_val} guard :{self.guard_val}")
-                if args["prob"]:
+                print_verbose( self.options, 5, "", f"base_val : {self.base_val} guard :{self.guard_val}" )
+                if self.options.prob:
                     diffs = []
                     upvarobj = []
                     downvarobj = []
-                    lamba = args["lambda"]
                     eps = 1e-30
                     
                     for key in self.probs.keys():
                         keys = list(self.probs[key].keys())
-                        for i in range(len(keys)-1):
+                        if key not in self.pdict:
+                            continue
+                        max_terms = min(len(keys) - 1, len(self.pdict[key]))
+                        for i in range(max_terms):
                             diffs.append(np.log(self.probs[key][keys[i]] + eps)-np.log(self.probs[key][keys[i+1]]+eps) )
                             upvarobj.append(self.pdict[key][i][1])
                             downvarobj.append(self.pdict[key][i][2])
-                    if args["objective"]:
+                    if self.options.objective:
                         self.m.setObjective(
                             LinExpr(np.array(diffs), np.array(upvarobj))
                             + LinExpr(np.array(diffs), np.array(downvarobj)) ,
@@ -843,7 +933,7 @@ class milpSolver(object):
                             GRB.MAXIMIZE,
                         )
                 else:
-                    if args["objective"]:
+                    if self.options.objective:
                         self.m.setObjective(
                             LinExpr(up_weights, self.llist)
                             - LinExpr(down_weights, self.llist2),
@@ -853,76 +943,117 @@ class milpSolver(object):
         self.m.update()
         self.m.setParam("TimeLimit", 60 * 60)
         # self.m.setParam("SolutionLimit", 1)
-        if self.args["prob"]:
+        if self.options.prob:
             self.m.setParam(GRB.Param.PoolSolutions, 1)  # Get up to 10 solutions
         else:
             self.m.setParam("SolutionLimit", 1)
         
 
         tic = time.perf_counter()
-        # Save the MILP constraints to a file
-        constraint_file = "milp_constraints.lp"
-        self.m.write(constraint_file)
-        print(f"MILP constraints saved to {constraint_file}")
+        if self.options.verbosity > 8:
+            # Save the MILP constraints to a file
+            constraint_file = "/tmp/milp_constraints.lp"
+            self.m.write(constraint_file)
+            print_verbose( self.options, 8, "MILP constraints saved", f" {constraint_file}" )
+        
+        if self.local_sample:
+            local_range = self.local_check_update_range(self.local_sample, self.model.op_range_list)
+            for key in self.pdict.keys():
+                lo, hi = local_range[key]
+                for (threshold, p_var, p2_var) in self.pdict[key]:
+                    # p=1 means x <= threshold, p=0 means x > threshold
+                    if hi <= threshold:       
+                        self.m.addConstr(p_var == 1)
+                        self.m.addConstr(p2_var == 1)
+                    elif lo > threshold:      
+                        self.m.addConstr(p_var == 0)
+                        self.m.addConstr(p2_var == 0)
+                    else:
+                        pass
+        
+        
         self.m.optimize()
         toc = time.perf_counter()
-        print('Time:', (toc - tic), 'seconds')
+        timetaken = toc - tic
+        print_verbose( self.options, 3, 'Time', f" {(toc - tic)} seconds" )
         if self.m.status == GRB.Status.INFEASIBLE:
-            print(self.varyingFeat,(toc-tic),"Insensitive")
-            return
+            print("Insensitive",self.varyingFeat)
+            # print(self.varyingFeat,(toc-tic),"Insensitive")
+            print_info('Time', timetaken)
+
+            return False
 
         if self.m.status == GRB.Status.TIME_LIMIT:
-            print("Timeout")
-            return
+            print_verbose( self.options, 3, 'Time', f"Timeout" )
+            return False
         
-        print(f"Sensitive features: {self.varyingFeat}")
+        print_info('Sensitive features', f"{self.varyingFeat}" )
+        print_info('Time', timetaken)
         
         x =[0] * self.model.n_features
         x2 =[0] * self.model.n_features
+        # -- intializing region pair --
+        region1 = []
+        region2 = []
+
+        for f in range(self.model.n_features):
+            if hasattr(self.model,"op_range_list"):
+                oprange = self.model.op_range_list[f]
+                low,high = (oprange[0],oprange[1])
+            else:
+                low, high = -np.inf,np.inf
+            region1.append(Interval('(',low,high,')'))
+            region2.append(Interval('(',low,high,')'))
+
+
         for i in range(1):
             self.m.setParam(GRB.Param.SolutionNumber, i)
-            print(f"\nSolution {i+1}")
-            print(f"Objective Value: {self.m.PoolObjVal}")
-            
-            
+            print_verbose(self.options, 5, "", f"\nSolution {i+1}")
+            print_verbose(self.options, 5, "", f"Objective Value: {self.m.PoolObjVal}")
+            #-------------------------------------------------------------
+            #  DO NOT REMOVE THIS COMMENTED CODE
+            #-----------------------------------------------------------
+            # for key in self.pdict.keys():
+            #     trees = self.model.trees
+            #     splits = trees[trees['Feature'] == f'f{key}']['Split']
+            #     vals1 = [node[0] for node in self.pdict[key] if node[1].x > 0.5] + [splits.max()+1]
+            #     x[key] = (
+            #         vals1[0] + ([splits.min()-1] + [node[0] for node in self.pdict[key]])[-len(vals1)]
+            #     ) / 2
+            #     vals2 = [node[0] for node in self.pdict[key] if node[2].x > 0.5] + [splits.max()+1]
+            #     x2[key] = (
+            #         vals2[0] + ([splits.min()-1] + [node[0] for node in self.pdict[key]])[-len(vals2)]
+            #     ) / 2
 
+            # x = np.array(x)
+            # x2 = np.array(x2)
+            # pred1 = self.model.predict([x])#,pred_leaf=True)#[0][0]
+            # pred2 = self.model.predict([x2])#,pred_leaf=True) #[0][0]
             
+            #-----------region pair-------------------------------------------
+            default_open = '[' if self.model.split_kind == '<' else '('
+            defaul_close = ')' if self.model.split_kind == '<' else ']'
             for key in self.pdict.keys():
                 trees = self.model.trees
                 splits = trees[trees['Feature'] == f'f{key}']['Split']
-                vals1 = [node[0] for node in self.pdict[key] if node[1].x > 0.5] + [splits.max()+1]
-                x[key] = (
-                    vals1[0] + ([splits.min()-1] + [node[0] for node in self.pdict[key]])[-len(vals1)]
-                ) / 2
-                vals2 = [node[0] for node in self.pdict[key] if node[2].x > 0.5] + [splits.max()+1]
-                x2[key] = (
-                    vals2[0] + ([splits.min()-1] + [node[0] for node in self.pdict[key]])[-len(vals2)]
-                ) / 2
+                low, high = self.model.op_range_list[key]
+                vals1 = [node[0] for node in self.pdict[key] if node[1].x > 0.5] + [high]
+                reg1 = [([low] + [node[0] for node in self.pdict[key]])[-len(vals1)] ,vals1[0]]
 
-            x = np.array(x)
-            x2 = np.array(x2)
-            k = 5
-            # print(mulprob(getprob(x,self.probs,self.guards)))
-            # print(mulprob(getprob(x2,self.probs,self.guards)))
-            # print(addprob(getprob(x,self.probs,self.guards)))
-            # print(addprob(getprob(x2,self.probs,self.guards)))
-            # print("Closest 5-1:", get_dist(x,self.X,self.y,k))
-            # print("Closest 5-2:",get_dist(x2,self.X,self.y,k))
-            # print("Mean 1:", get_dist(x,self.X,self.y,0))
-            # print("Mean 2:", get_dist(x2,self.X,self.y,0))
-            # print("-----------------------------------\n")
-            res = []
-            
-            for i in range(len(x)):
-                if x[i] != x2[i]:
-                    res.append((x[i], x2[i]))
-                else:
-                    res.append(x[i])
-
+                vals2 = [node[0] for node in self.pdict[key] if node[2].x > 0.5] + [high]
+                reg2 = [([low] + [node[0] for node in self.pdict[key]])[-len(vals2)] ,vals2[0]]
                 
-        # xcopy = x.copy()
-        # x2copy = x2.copy()
-        # # print("xcopy",xcopy)
+                region1[key]=Interval('(' if reg1[0] == low else default_open,
+                                      reg1[0],
+                                      reg1[1],
+                                      ')' if reg1[1] == high else defaul_close)
+                region2[key]=Interval('(' if reg2[0] == low else default_open,
+                                      reg2[0],
+                                      reg2[1],
+                                      ')' if reg2[1] == high else defaul_close)
+            #--------------------------------------------------------------------------------------
+        utils.print_verbose(options,0,"region1",self.model.print_reg(region1))
+        utils.print_verbose(options,0,"region2",self.model.print_reg(region2))
         xbound = {}
         x2bound = {}
         features = list(self.model.feature_names.keys())
@@ -933,21 +1064,17 @@ class milpSolver(object):
         active_leaf2 = []
         sum1 =0
         sum2 =0
-        
-        for i in range(len(self.llist)):
-            if self.llist[i].x > 0.5:
-                active_leaf1.append((i,self.leaf_v_list[i]))
-                sum1 += self.leaf_v_list[i]
-            if self.llist2[i].x > 0.5:
-                active_leaf2.append((i,self.leaf_v_list[i]))
-                sum2 += self.leaf_v_list[i]
-        print(f"sigmoid(x+base_val): {1/(1+np.exp(-(sum1+self.base_val) ))}, sigmoid(x2+base_val): {1/(1+np.exp(-(sum2 + self.base_val)))}")
-        print(f"sum1: {sum1-sum2}")
 
-        # print(active_leaf1[0][1], self.llist[active_leaf1[0][0]])
-        # print(active_leaf2[0][1], self.llist[active_leaf2[0][0]])
-        # print(trees[(trees['Tree']==0) & (trees['Feature'] == 'Leaf') ]) #
-        # exit()
+        if self.options.verbosity > 9:
+            for i in range(len(self.llist)):
+                if self.llist[i].x > 0.5:
+                    active_leaf1.append((i,self.leaf_v_list[i]))
+                    sum1 += self.leaf_v_list[i]
+                if self.llist2[i].x > 0.5:
+                    active_leaf2.append((i,self.leaf_v_list[i]))
+                    sum2 += self.leaf_v_list[i]
+            print_verbose(self.options, 9, f"diff_sum",f"{sum1-sum2}")
+            print_verbose(self.options, 9, "", f"sigmoid(x+base_val): {1/(1+np.exp(-(sum1+self.base_val) ))}, sigmoid(x2+base_val): {1/(1+np.exp(-(sum2 + self.base_val)))}")
         
         op_range_list = []
         for j in range(self.model.n_features):
@@ -994,53 +1121,51 @@ class milpSolver(object):
                     # x2bound[attr][0] = max(x2bound[attr][0], thres)
                 else: pass
 
-        # print("Final bounds after MILP:")
-        # for key in xbound:
-        #     print(f"Feature {key} bounds: {xbound[key]} {x2bound[key]}") 
-        # print(f"varying features: {self.varyingFeat}")
-        # for key in xbound:
-        #     lb1, ub1 = xbound[key]
-        #     lb2, ub2 = x2bound[key]
-        #     shared_lb = max(lb1, lb2)
-        #     shared_ub = min(ub1, ub2)
-
-        #     if key not in self.varyingFeat and shared_lb < shared_ub:
-                
-        #         xbound[key] = (shared_lb , shared_ub)
-
-            # else:
-            #     print(f"not varying feature {key}, setting bounds to shared bounds")
-                # x2bound[key] = (shared_lb , shared_ub)
-            # else:
-            #     if shared_lb > shared_ub:
-            #         x[key] = (lb1 + ub1) / 2
-            #         x2[key] = (lb2 + ub2) / 2
-            #     else:
-            #         x_range = (lb1, shared_lb) if lb1 < shared_lb else (shared_ub, ub1)
-            #         x2_range = (lb2, shared_lb) if lb2 < shared_lb else (shared_ub, ub2)
-
-            #         x[key] = (x_range[0] + x_range[1]) / 2 if x_range[0] < x_range[1] else (shared_lb + shared_ub) / 2
-            #         x2[key] = (x2_range[0] + x2_range[1]) / 2 if x2_range[0] < x2_range[1] else (shared_lb + shared_ub) / 2
-
+        if self.options.compute_data_distance:
+            data_distance.compute_data_distance(xbound,self.varyingFeat,self.model.feature_names,self.model.n_features,self.model.trees,options)
+            # data_distance.compute_data_distance(xbound,self.varyingFeat,self.model.feature_names,self.model.n_features,self.model.trees,options,dist_type='L0')
+            # data_distance.compute_data_distance(xbound,self.varyingFeat,self.model.feature_names,self.model.n_features,self.model.trees,options,dist_type='L1')
+            # data_distance.compute_data_distance(xbound,self.varyingFeat,self.model.feature_names,self.model.n_features,self.model.trees,options,dist_type='L2')
+            # data_distance.compute_data_distance(xbound,self.varyingFeat,self.model.feature_names,self.model.n_features,self.model.trees,options,dist_type='Linf')
         
-
-        
-        # print("sensitive bounds",xbound)
-        # print(f"distance flag {args["compute_data_distance"]}")
-        # input()
-        if args["compute_data_distance"]:
-            # print(f"=========================================")
-            print(f"First region = {xbound}")
-            # print(f"Second region = {x2bound}")
-            data_distance.compute_data_distance(xbound,self.varyingFeat,self.model.feature_names,self.model.n_features,self.model.trees,options,dist_type='L0')
-            data_distance.compute_data_distance(xbound,self.varyingFeat,self.model.feature_names,self.model.n_features,self.model.trees,options,dist_type='L1')
-            data_distance.compute_data_distance(xbound,self.varyingFeat,self.model.feature_names,self.model.n_features,self.model.trees,options,dist_type='L2')
-            data_distance.compute_data_distance(xbound,self.varyingFeat,self.model.feature_names,self.model.n_features,self.model.trees,options,dist_type='Linf')
-            
-            
-        # x = np.array(x)
-        # x2 = np.array(x2)
-        
+        x = self.model.region2point(region1)
+        x2 = self.model.region2point(region2)
+        if self.options.pca_data:
+            pca = compute_pca_params(
+                csv_path=self.options.pca_data,
+                center=True,
+                verbose=(self.options.verbosity > 0),
+            )
+            feature_indices = []
+            for fname in pca["feature_names"]:
+                if isinstance(fname, str) and fname.startswith("f"):
+                    feature_indices.append(int(fname[1:]))
+                elif isinstance(fname, str) and fname.isdigit():
+                    feature_indices.append(int(fname))
+            point1_pca = []
+            point2_pca = []
+            for idx in feature_indices:
+                point1_pca.append(x[idx])
+                point2_pca.append(x2[idx])
+            milp_x = []
+            milp_x2 = []
+            for idx in feature_indices:
+                milp_x.append(self.x[idx].X)
+                milp_x2.append(self.x2[idx].X)
+            milp_expr1_vals = evaluate_pca_row_values(milp_x, pca["ImP"], pca["mean"])
+            milp_expr2_vals = evaluate_pca_row_values(milp_x2, pca["ImP"], pca["mean"])
+            print("[PCA] milp x (dataset dims) =", milp_x)
+            print("[PCA] milp x2 (dataset dims) =", milp_x2)
+            print("[PCA] expr1(milp x) =", milp_expr1_vals)
+            print("[PCA] expr2(milp x2) =", milp_expr2_vals)
+            expr1_vals = evaluate_pca_row_values(point1_pca, pca["ImP"], pca["mean"])
+            expr2_vals = evaluate_pca_row_values(point2_pca, pca["ImP"], pca["mean"])
+            print("[PCA] expr1(region1 point) =", expr1_vals)
+            print("[PCA] expr2(region2 point) =", expr2_vals)
+        pred1 = self.model.predict([x])
+        pred2 = self.model.predict([x2])
+        # print(x)
+        # print(x2)
         res = []
         x_colored = []
         x2_colored = []
@@ -1048,89 +1173,28 @@ class milpSolver(object):
         for i in range(len(x)):
             if x[i] != x2[i]:
                 res.append((x[i], x2[i]))
-                #x_colored.append(f"\033[91m{x[i]}\033[0m")
-                #x2_colored.append(f"\033[91m{x2[i]}\033[0m")
+                x_colored.append(f"\033[91m{x[i]}\033[0m")
+                x2_colored.append(f"\033[91m{x2[i]}\033[0m")
                 differentfeature.append(i)
             else:
                 res.append(x[i])
                 x_colored.append(str(x[i]))
                 x2_colored.append(str(x2[i]))
+        
         # print("Inputs ", res)
-        print(f"feature varying: {differentfeature}")
         utils.print_array( 'Sensitive sample 1:', x_colored)
         utils.print_array( 'Sensitive sample 2:', x2_colored)
         # with open("res.pkl", "wb") as f:
         #     pickle.dump((x, x2), f)
+        
         for i in range(0,len(x)):
             if(x[i] == 0): x[i]   = 0.0000000001
             if(x2[i] == 0): x2[i] = 0.0000000001
-        pred1 = self.model.predict([x])#,pred_leaf=True)#[0][0]
-        pred2 = self.model.predict([x2])#,pred_leaf=True) #[0][0]
-
-        # utils.dump_dotty(self.model[0])
-
-        # pred1 = self.model.pred_leaf_contribs(x)[0]#, pred_leaf=True)
-        # pred2 = self.model.pred_leaf_contribs(x2)[0]#, pred_leaf=True)
-
-        # p1,nodes = utils.eval_trees(x, 500, trees,base_val=0.3)
-        # for i in range(0,500):
-        #     if nodes[i] != pred1[0][i]:
-        #         print(i)
-        # print(p1)
-        
-        # val1 = np.dot(np.array([i.X for i in self.llist]), up_weights)
-        # val2 = np.dot(np.array([i.X for i in self.llist2]), down_weights)
+        # pred1 = self.model.predict([x])#,pred_leaf=True)#[0][0]
+        # pred2 = self.model.predict([x2])#,pred_leaf=True) #[0][0]
 
         print(f"Output Values: {pred1} {pred2}")
-        
-        # val1 = np.dot(np.array([i.X for i in self.llist]), up_weights)
-        # class_lists = []
-        # for i in range(self.n_classes):
-        #     class_lists.append(np.array(self.leaf_class_list) == i)
-
-        # for i in range(self.n_classes):
-        #     val2 = np.dot(np.array([i.X for i in self.llist])[class_lists[i]], up_weights[class_lists[i]])
-        #     print(val2)
-
-        # print("down")
-        # for i in range(self.n_classes):
-        #     val2 = np.dot(np.array([i.X for i in self.llist2])[class_lists[i]], down_weights[class_lists[i]])
-        #     print(val2)
-        if args["prob"]:
-            k = 5
-            # print("5-nearest distance1: ",get_dist(x,self.X,k))
-            # print("5-nearest distance2: ",get_dist(x2,self.X,k))
-            # print("Distance from mean1: ",get_dist(x,self.X,0))
-            # print("Distance from mean2: ",get_dist(x2,self.X,0))
-
-
-        # print(f"Predictions inv: {sigmoid_inv(pred1)} {sigmoid_inv(pred2)}")
-        # print(f"MILP: {val1} {val2}")
-
-        # if(self.args["multiclass"]):
-        #     class_lists = []
-        #     for i in range(self.n_classes):
-        #         class_lists.append(np.array(self.leaf_class_list) == i)
-        #     print('mislabel constraint1:', np.sum((np.array(self.leaf_v_list)*np.array([item.x for item in self.llist]))[class_lists[self.args["truelabel"]]]) - np.sum((np.array(self.leaf_v_list)*np.array([item.x for item in self.llist]))[class_lists[self.args["otherlabel"]]]))
-        #     print('mislabel constrain2:',np.sum((np.array(self.leaf_v_list)*np.array([item.x for item in self.llist2]))[class_lists[self.args["truelabel"]]]) - np.sum((np.array(self.leaf_v_list)*np.array([item.x for item in self.llist2]))[class_lists[self.args["otherlabel"]]]))
-        #
-        # else:
-        #     print('mislabel constraint1:', np.sum((np.array(self.leaf_v_list)*np.array([item.x for item in self.llist]))))
-        #     print('mislabel constrain2:', np.sum(np.array(self.leaf_v_list)*np.array([item.x for item in self.llist2])))
-        # print([self.pdict[x][0] for x in self.pdict])
-        # print([self.pdict[x][1].x for x in self.pdict])
-        # print([self.pdict[x][2].x for x in self.pdict])
-        # if (not suc):
-        #     if self.binary:
-        #         manual_res = self.check(x, self.json_file)
-        #     else:
-        #         manual_res = self.check(x, self.pos_json_file) - self.check(x, self.neg_json_file)
-        #     print('manual prediction result:', manual_res)
-        #     if (not self.binary and manual_res>=0)  or (self.binary and int(manual_res>0) == label):
-        #         print('** manual prediction shows attack failed!! **')
-        #     else:
-        #         print('** manual prediction shows attack succeeded!! **')
-        # return x
+        return True
 
     def check(self, x, json_file):
         # Due to XGBoost precision issues, some attacks may not succeed if tested using model.predict.
@@ -1172,14 +1236,7 @@ class milpSolver(object):
         return manual_res
 
 
-args = {}
-
-
-def main(args_inp,options):
-    global args
-    args = vars(args_inp)
-    # print(args)
-    # print(options)
+def main(options):
     
     random.seed(8)
     np.random.seed(8)
@@ -1189,66 +1246,39 @@ def main(args_inp,options):
     #---------------------------------------
     e = ensemble.Ensemble(options)
     e.load(print_vitals = True)
-    # base_val = e.get_base_value()
-    
-    # # ----------------------------------------------------
-    # # Read model file
-    # # ----------------------------------------------------
-    # if options.model_file.isdigit():
-    #     bst = open_model(model_files[int(options.model_file)], args["max_trees"])
-    # else:
-    #     bst = open_model(options.model_file, args["max_trees"],details_file = args['details']) #NV
-    # model = xgboost_wrapper( e, binary=True, max_trees=args["max_trees"] )
     model = e
-    if not args["all_features"]:
-        varyingFeat = args["features"]
+    sens_sets = [options.features]
+    if options.all_single: sens_sets = [ [f] for f in range(0, model.n_features) ]
+    if options.local_check_samples:
+        op_range_list = model.op_range_list
+        if len(op_range_list) != len(options.local_check_samples[0]):
+            print('Error: number of inputs does not match model!')
+            exit()
+        # for f in sens_sets:
+        results = []
+        idx = 0
+        for sample in options.local_check_samples:
+            for f in sens_sets:
+                options.features = f
+                utils.print_verbose(options, -1, "--==> Query", f"{idx}")
+                solver = milpSolver(model, options=options)
+                solver.local_sample = sample          # <-- pass sample in
+                results.append(solver.attack(options))
+                idx += 1
+        utils.print_verbose( options, -1, "Fraction of sensitive queries:", f"{sum(results)}/{len(results)}")
     else:
-        varyingFeat = [i for i in range(0, e.n_features)]
+        utils.print_verbose(options, -1, "--==> Query", f"0")
+        solver = milpSolver(
+            model,
+            options=options,
+        )
+        solver.local_sample = None
+        solver.attack(options)
         
-    if args["precision"] < 0:
-        args["precision"] = 10 * bst[-3]
-        print(f'Precision={args["precision"]}')
+    # solver = milpSolver(
+    #     model,
+    #     options=options,
+    # )
 
-    attack = milpSolver(
-        model,
-        guard_val=args["gap"],
-        varyingFeat=varyingFeat,
-        debug=args["debug"],
-        args=args,
-        options=options,
-    )
-
-    global_start = time.time()
-    attack.attack(options)
-
-
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("filenum", type=str, help="model path")
-#     parser.add_argument(
-#         "-g", "--gap", type=float, default=GUARD_VAL, help="guard value"
-#     )
-#     parser.add_argument(
-#         "-r",
-#         "--round_digits",
-#         type=int,
-#         default=ROUND_DIGITS,
-#         help="number of digits to round",
-#     )
-#     parser.add_argument(
-#         "--max_trees",
-#         type=int,
-#         default=None,
-#         help="Maximum number of trees to consider",
-#     )
-#     parser.add_argument(
-#         "--features",
-#         type=int,
-#         nargs="+",
-#         default=None,
-#         help="Indexes of the features for which to do sensitivity analysis",
-#     )
-#     parser.add_argument(
-#         "--debug", action="store_true", help="Run serially and stop on pdb statements"
-#     )
-#     main(parser.parse_args())
+    # global_start = time.time()
+    # solver.attack(options)

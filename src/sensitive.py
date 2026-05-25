@@ -13,7 +13,8 @@ from tqdm import tqdm
 from rangedbooster import ExtendedBooster
 from converttoopb import roundingSolve
 from subprocess import check_output
-from xyplot import Curve
+from pb import pb_solver
+from milp import main as milp_solver
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -21,26 +22,19 @@ sys.path.insert(0, str(ROOT))
 
 import numpy as np
 
+
 # import subprocess
 
-from milp import main as milp_solver
-
-# dummy milp_solver
-# def milp_solver(args,options):
-#     pass
-
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 # from utils import open_model, open_model_xgb, open_model_sklearn, sigmoid_inv, model_details_file
 from options import *
-from pb import pb_solver
 
+np.random.seed(SEED)  # SEED is imported from options via *
 
 # pd.set_option("display.max_rows", 500)
 
 def main(args,options):
     if options.solver == "milp":
-         milp_solver(args,options)
+         milp_solver(options)
     elif options.solver in [ "pb", "naive_smt", "rounding", "roundingsoplex"]:
         # --------------------------------------
         # Calling various pseudo boolean solvers 

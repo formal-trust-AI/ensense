@@ -28,7 +28,6 @@ def segment_idx( v, guards ): # TODO : should be a binary search
     #             last = midpoint-1
     #         else:
     #             first = midpoint+1
-                
     # return (pos, found)
 
 def interval_distance( p1, p2 ):
@@ -161,7 +160,7 @@ def distL2(point1,point2, sensitive):
     return dis
 
 
-def data_distance(data, points, sensitive, segments = {}, dist_type = "L0"):    
+def data_distance(data, points, sensitive, segments = {}, dist_type = "l0"):    
     def find_min(dist_measure):
         min_d,min_point = float("inf"), None
         min_d2,min_point2 = float("inf"), None
@@ -176,11 +175,11 @@ def data_distance(data, points, sensitive, segments = {}, dist_type = "L0"):
             return (1,min_d2,min_point2)
         return (0,min_d,min_point)
     if len(points)==2 : sensitive = []
-    if dist_type == "L0": (idx,min_d,min_point) = find_min(dist)
-    if dist_type == 'L1':(idx,min_d,min_point) = find_min(distL1)
-    if dist_type == "L2": (idx,min_d,min_point) = find_min(distL2)
-    if dist_type == "Linf": (idx,min_d,min_point) = find_min(distLinf)
-    if dist_type == "SegmentL1":
+    if dist_type == "l0": (idx,min_d,min_point) = find_min(dist)
+    if dist_type == 'l1':(idx,min_d,min_point) = find_min(distL1)
+    if dist_type == "l2": (idx,min_d,min_point) = find_min(distL2)
+    if dist_type == "linf": (idx,min_d,min_point) = find_min(distLinf)
+    if dist_type == "Segmentl1":
         if len(points)==2 : sensitive = []
         idx,min_d, min_point = 0, float("inf"), None
         idx2,min_d2, min_point2 = float("inf"), None
@@ -205,7 +204,8 @@ def data_distance(data, points, sensitive, segments = {}, dist_type = "L0"):
     print('Nearest point in data:', min_point)
     print('===========================================================')
 
-def compute_data_distance( points, f, feature_names, n_features, trees, options,dist_type="L2"):
+def compute_data_distance( points, f, feature_names, n_features, trees, options):
+    dist_type = options.metric
     if not isinstance(points[0], list): points = [points]
     assert(len(points[0]) == len(feature_names))
     if options.data_file:
@@ -221,7 +221,7 @@ def compute_data_distance( points, f, feature_names, n_features, trees, options,
         data = data[feature_list]
         # dist_type = "SegmentL1"
         # dist_type = "L0"
-        if dist_type == "SegmentL1":
+        if dist_type == "Segmentl1":
             segments = utils.feature_segments(trees,n_features)
             data_distance( data, points, f, segments=segments, dist_type="SegmentL1" )
         else:

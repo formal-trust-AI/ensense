@@ -1,0 +1,30 @@
+Win Rates for Dataset: german_credit
+========================================
+
+--- Pairwise L2 Norm Win Rates ---
+clause: 57.5%
+prob: 48.5%
+plain: 48.0%
+pca_only: 40.3%
+pca_prob_clause: 40.2%
+pca_prob: 38.8%
+pca_clause: 35.2%
+
+--- Mean Centroid L1 Win Rates ---
+clause: 90.7%
+pca_clause: 71.7%
+prob: 61.1%
+plain: 40.9%
+pca_only: 37.7%
+pca_prob_clause: 28.9%
+pca_prob: 19.2%
+
+--- Mean Centroid L2 Win Rates ---
+clause: 92.9%
+pca_clause: 66.6%
+prob: 62.3%
+plain: 45.5%
+pca_only: 35.4%
+pca_prob_clause: 28.6%
+pca_prob: 19.0%
+

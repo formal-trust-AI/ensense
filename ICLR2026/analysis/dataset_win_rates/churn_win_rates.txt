@@ -1,0 +1,30 @@
+Win Rates for Dataset: churn
+========================================
+
+--- Pairwise L2 Norm Win Rates ---
+prob: 50.6%
+pca_only: 48.1%
+plain: 44.5%
+clause: 44.4%
+pca_clause: 40.7%
+pca_prob: 36.7%
+pca_prob_clause: 35.4%
+
+--- Mean Centroid L1 Win Rates ---
+prob: 92.4%
+clause: 88.9%
+plain: 47.3%
+pca_prob: 40.1%
+pca_clause: 32.3%
+pca_prob_clause: 26.5%
+pca_only: 22.5%
+
+--- Mean Centroid L2 Win Rates ---
+clause: 92.2%
+prob: 90.5%
+plain: 50.9%
+pca_prob: 46.8%
+pca_prob_clause: 26.4%
+pca_clause: 26.1%
+pca_only: 17.0%
+

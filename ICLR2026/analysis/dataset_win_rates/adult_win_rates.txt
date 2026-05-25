@@ -1,0 +1,30 @@
+Win Rates for Dataset: adult
+========================================
+
+--- Pairwise L2 Norm Win Rates ---
+pca_only: 52.6%
+pca_clause: 50.3%
+pca_prob_clause: 48.1%
+plain: 48.0%
+clause: 46.5%
+pca_prob: 45.4%
+prob: 32.6%
+
+--- Mean Centroid L1 Win Rates ---
+pca_prob: 86.8%
+prob: 79.4%
+pca_prob_clause: 67.6%
+clause: 42.6%
+pca_clause: 32.4%
+plain: 22.5%
+pca_only: 12.2%
+
+--- Mean Centroid L2 Win Rates ---
+pca_prob: 79.5%
+prob: 75.1%
+pca_prob_clause: 64.7%
+clause: 46.3%
+pca_clause: 33.7%
+plain: 28.3%
+pca_only: 16.0%
+
