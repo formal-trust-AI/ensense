@@ -10,13 +10,12 @@ import time
 from converttoopb import roundingSolve
 import data_distance
 import copy
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import xgboost as xgb
 from ensemble import Interval
 
 from joblib import Parallel, delayed
 import tqdm
+
 
 
 def dump_solver(solver, filename):
@@ -26,10 +25,10 @@ def dump_solver(solver, filename):
         f.close()
 
 
-def solve(phi):
+def solve(options,phi):
     tic = time.perf_counter()
     s = z3.Solver()
-    s.set("random_seed", SEED)
+    s.set("random_seed", options.seed)
     s.add(phi)
     r = s.check()
     toc = time.perf_counter()
@@ -37,70 +36,6 @@ def solve(phi):
         m = s.model()
         return m
     return None
-
-
-def plot_variations(model, data, features, trees, feature_names, op_range_list):
-    fvalues = []
-    for feature in features:
-        sliced = trees[(trees["Feature"] == f"f{feature}")][["Feature", "Split"]].copy()
-        sliced.sort_values(["Split"], inplace=True)
-        sliced.drop_duplicates(inplace=True)
-        sliced = sliced[
-            (op_range_list[feature][0] < sliced["Split"])
-            & (sliced["Split"] <= op_range_list[feature][1])
-        ]
-        # values = [op_range_list[feature][0]] + sliced['Split'].tolist()
-        values = sliced["Split"].tolist()
-        fvalues.append(values)
-
-    # print(fvalues[0])
-    predictions = []
-    if len(fvalues) == 2:
-        for v in fvalues[1]:
-            data[features[1]] = v
-            rows = []
-            for f0 in fvalues[0]:
-                data[features[0]] = f0
-                rows.append(data.copy())
-            predict_col = model.predict(xgb.DMatrix(rows))
-            predictions.append(predict_col)
-    else:
-        rows = []
-        for f0 in fvalues[0]:
-            data[features[0]] = f0
-            rows.append(data.copy())
-        predict_col = model.predict(xgb.DMatrix(rows))
-        # predict_col = [ sigmoid_inv(x) for x in predict_col]
-        predictions.append(predict_col)
-
-    plt.style.use("_mpl-gallery")
-    if len(fvalues) == 1:
-        fig, ax = plt.subplots()
-        ax.plot(fvalues[0], predictions[0], linewidth=2.0)
-        plt.ylabel("Predict")
-        plt.xlabel(feature_names[features[0]])
-    else:
-        ax = plt.figure().add_subplot(projection="3d")
-        X, Y = np.meshgrid(np.array(fvalues[0]), np.array(fvalues[1]))
-        Z = np.array(predictions)
-        ax.plot_surface(
-            X,
-            Y,
-            Z,
-            cmap=cm.Blues,
-            # edgecolor='royalblue',
-            # lw=0.5, #rstride=8, cstride=8,
-            # alpha=0.3
-        )
-        # ax.contour(X, Y, Z, zdir='z', offset=-100, cmap='coolwarm')
-        # ax.contour(X, Y, Z, zdir='x', offset=-40, cmap='coolwarm')
-        # ax.contour(X, Y, Z, zdir='y', offset=40, cmap='coolwarm')
-        ax.set(
-            xlabel=feature_names[features[0]],
-            ylabel=feature_names[features[1]],
-            zlabel="Predict",
-        )
-    plt.show()
 
 
 def search_anomaly_for_features(
@@ -134,9 +69,6 @@ def search_anomaly_for_features(
     
     truelabel  = options.truelabel
     otherlabel = options.otherlabel
-    # print(truelabel)
-    # print(otherlabel)
-    # exit()
 
     vars1 = {}
     vars2 = {}
@@ -192,18 +124,20 @@ def search_anomaly_for_features(
         for r, row in sliced.iterrows():
             var_name = f"f{i}" + "_" + str(row["Split"])
             split_bit_map[i].append(var_name)
-            if ensemble.split_kind == "<":
-                split_sat_value_map[var_name] = float(prev)
-            else:
-                split_sat_value_map[var_name] = float(row["Split"])
+            split_sat_value_map[var_name] = float(prev)
+            # if ensemble.split_kind == "<":
+            #     split_sat_value_map[var_name] = float(prev)
+            # else:
+            #     split_sat_value_map[var_name] = float(row["Split"])
             split_guard_map[var_name] = float(row["Split"]) 
             prev = float(row["Split"])
         make_bits_for_features(i, "v1", sliced, vars1, ord_bits_cons)
         make_bits_for_features(i, "v2", sliced, vars2, ord_bits_cons)
-        if ensemble.split_kind == "<":
-            split_sat_value_map[f"f{i}" + "_" + str("Last")] = prev
-        else:
-            split_sat_value_map[f"f{i}" + "_" + str("Last")] = op_range_list[i][1]
+        split_sat_value_map[f"f{i}" + "_" + str("Last")] = prev
+        # if ensemble.split_kind == "<":
+        #     split_sat_value_map[f"f{i}" + "_" + str("Last")] = prev
+        # else:
+        #     split_sat_value_map[f"f{i}" + "_" + str("Last")] = op_range_list[i][1]
 
     def not_too_far(d_idx, vars1, vars2, cons):  # TODO
         num_splits = len(split_bit_map[d_idx])
@@ -244,6 +178,7 @@ def search_anomaly_for_features(
     rev_feature_names = {}
     for i in feature_names:
         rev_feature_names[feature_names[i]] = i 
+        
     def add_clause_restriction(clause, sensitive_features):
         # give count on guards
         cons = []
@@ -410,6 +345,7 @@ def search_anomaly_for_features(
             if f in features:
                 return True
         return False
+    
 
     def gen_pb_cons_tree(trees, vars, up, rangemap={}, stop=lambda x, y: False):
         cons = []
@@ -528,6 +464,94 @@ def search_anomaly_for_features(
             cons.append(z3.PbEq(tree_leaves, 1))
             # for pair in bits: all_leaves.append(pair)
         return cons, all_leaves, affected, unaffected
+
+    def gowal_distance_constraint(
+        sample,
+        features,
+        feature_types,
+        op_range_list,
+        split_bit_map,
+        split_sat_value_map,
+        vars1,
+        perturb,
+        binary_perturb,
+        ):
+
+        cont_lhs_terms = []
+        binary_lhs_term = []
+        # constant  = 0.0
+        cont_constant = 0.0
+        bin_constant  = 0.0
+
+        for feat_idx in range(len(op_range_list)):
+            if feat_idx in features:
+                continue
+            fnames = split_bit_map[feat_idx]
+            if len(fnames) == 0:
+                continue
+
+            s_f   = float(sample[feat_idx])
+            ftype = feature_types[feat_idx]
+            low, high = op_range_list[feat_idx]
+            thresholds  = [split_guard_map[fn] for fn in fnames]
+            breakpoints = [low] + thresholds + [high]
+            K = len(thresholds)
+
+            if ftype == 'linear':
+                span = high - low if high != low else 1.0
+                def interval_dist(k):
+                    lb_k, ub_k = breakpoints[k], breakpoints[k+1]
+                    if s_f < lb_k:   return (lb_k - s_f) / span
+                    if s_f >= ub_k:  return (s_f - ub_k) / span
+                    return 0.0
+
+            elif ftype == 'log':
+                if low <= 0 or s_f <= 0:
+                    continue
+                log_span = math.log(high) - math.log(low)
+                if log_span == 0:
+                    continue
+                log_s = math.log(s_f)
+                def interval_dist(k):
+                    lb_k, ub_k = breakpoints[k], breakpoints[k+1]
+                    log_lb = math.log(lb_k) if lb_k > 0 else -float('inf')
+                    log_ub = math.log(ub_k) if ub_k > 0 else  float('inf')
+                    if log_s < log_lb:   return (log_lb - log_s) / log_span
+                    if log_s >= log_ub:  return (log_s - log_ub) / log_span
+                    return 0.0
+
+            elif ftype in ('categorical', 'bool'):
+                def interval_dist(k):
+                    lb_k, ub_k = breakpoints[k], breakpoints[k+1]
+                    return 0.0 if lb_k <= s_f < ub_k else 1.0
+
+            else:
+                continue
+            
+
+            # constant += interval_dist(K)
+            if ftype in ('categorical', 'bool'):
+                bin_constant += interval_dist(K)
+            else:
+                cont_constant += interval_dist(K)
+
+            for k in range(K):
+                
+                dist = interval_dist(k) - interval_dist(k + 1)
+                if dist != 0.0:
+                    if ftype in ('categorical', 'bool'): 
+                        binary_lhs_term.append((dist, vars1[fnames[k]]))
+                    else:
+                        cont_lhs_terms.append((dist, vars1[fnames[k]]))
+                        # lhs_terms.append((dist, vars1[fnames[k]]))
+        if not cont_lhs_terms and not binary_lhs_term:
+            return None
+        if binary_perturb >0:
+            return [z3.Sum([c * p for c, p in cont_lhs_terms]) <= perturb - cont_constant, 
+                    z3.Sum([c * p for c, p in binary_lhs_term]) <= binary_perturb - bin_constant]
+        else:
+            lhs_terms = cont_lhs_terms + binary_lhs_term  
+            return [z3.Sum([c * p for c, p in lhs_terms]) <= perturb - cont_constant - bin_constant]
 
         
     model = ExtendedBooster(model)
@@ -693,13 +717,28 @@ def search_anomaly_for_features(
     
     all_cons = ord_bits_cons + cs1 + cs2 + aone + prop + clauses
 
+    if options.gowal:
+        gowal_cons = gowal_distance_constraint(
+                sample          = options.current_sample,   
+                features        = set(features),
+                feature_types   = ensemble.feature_types,
+                op_range_list   = op_range_list,
+                split_bit_map   = split_bit_map,
+                split_sat_value_map = split_sat_value_map,
+                vars1           = vars1,
+                perturb  = options.perturb,
+                binary_perturb  = options.binary_perturb
+            )
+        if gowal_cons is not None:
+            all_cons = all_cons + gowal_cons
+    
     if options.verbosity > 6:
         print(prop)
         # print(all_cons)
 
     tic = time.perf_counter()
     if options.solver == "pb" or options.solver == "naive_smt":
-        m = solve(all_cons)
+        m = solve(options,all_cons)
     elif options.solver == "rounding":
         m = roundingSolve(all_cons)
     elif options.solver == "roundingsoplex":
@@ -717,8 +756,7 @@ def search_anomaly_for_features(
         if opt.check() == z3.sat:
             m = opt.model()
     else:
-        print('Solving method is not selected!')
-        exit()
+        utils.print_error('arguments', 'Solving method is not selected!')
     toc = time.perf_counter()
     solvingtime = toc - tic
     if m:
@@ -726,24 +764,20 @@ def search_anomaly_for_features(
         d2 = []
         region1 = []
         region2 = []
+        lbr = '[' if ensemble.split_kind == '<' else '('
+        rbr = ')' if ensemble.split_kind == '<' else ']'
         for idx in range(0, ensemble.n_features):
             temp = [split_sat_value_map[fname] for fname in split_bit_map[idx]]
             if len(split_bit_map[idx]) == 0:
                 v1 = split_sat_value_map[f"f{idx}_Last"]
                 v2 = split_sat_value_map[f"f{idx}_Last"]
-                region1.append(Interval(
-                                '(',
-                                v1,
-                                op_range_list[idx][1],
-                                ')'))#(v1,ensemble.op_range_list[idx][1])
-                region2.append(Interval('(',
-                                v2,
-                                op_range_list[idx][1],
-                                ')'))#(v1,ensemble.op_range_list[idx][1])
+                region1.append(Interval('[',op_range_list[idx][0],op_range_list[idx][1],']'))
+                region2.append(Interval('[',op_range_list[idx][0],op_range_list[idx][1],']'))
             else:
                 v1 = f"f{idx}_Last"
                 next_v1 = f"f{idx}_Last"
                 breaknext = False
+                lbr = '['
                 for fname in split_bit_map[idx]:
                     if breaknext:
                         next_v1 = fname
@@ -756,22 +790,20 @@ def search_anomaly_for_features(
                     if cond:
                         v1 = fname
                         breaknext = True
+                    else:
+                        lbr = '[' if ensemble.split_kind == '<' else '('
+                        
 
                 if v1 == f"f{idx}_Last": 
-                    region1.append(Interval('[',
-                                    split_sat_value_map[v1],
-                                    op_range_list[idx][1],
-                                    ')')) #(split_sat_value_map[v1],ensemble.op_range_list[idx][1])
+                    interval = Interval(lbr,split_sat_value_map[v1],op_range_list[idx][1],']')
                 else:
-                    region1.append(Interval(
-                                    '[',
-                                    split_sat_value_map[v1],
-                                    split_sat_value_map[next_v1],
-                                    ')')) #(split_sat_value_map[v1],split_sat_value_map[next_v1])
+                    interval = Interval(lbr,split_sat_value_map[v1],split_sat_value_map[next_v1],rbr)
+                region1.append(interval)
                 
                 v2 = f"f{idx}_Last"
                 next_v2 = f"f{idx}_Last"
                 breaknext = False
+                lbr = '['
                 for fname in split_bit_map[idx]:
                     if breaknext:
                         next_v2 = fname
@@ -784,17 +816,12 @@ def search_anomaly_for_features(
                     if cond:
                         v2 = fname
                         breaknext = True
+                    else:
+                        lbr = '[' if ensemble.split_kind == '<' else '('
                 if v2 == f"f{idx}_Last":
-                    region2.append(Interval('[',
-                                            split_sat_value_map[v2],
-                                            op_range_list[idx][1],
-                                            ')')) #(split_sat_value_map[v2],ensemble.op_range_list[idx][1])
+                    region2.append(Interval(lbr, split_sat_value_map[v2], op_range_list[idx][1],rbr)) 
                 else:
-                    region2.append(Interval(
-                                    '[',
-                                    split_sat_value_map[v2],
-                                    split_sat_value_map[next_v2],
-                                    ')')) #(split_sat_value_map[v2],split_sat_value_map[next_v2])
+                    region2.append(Interval(lbr,split_sat_value_map[v2],split_sat_value_map[next_v2],rbr)) 
                 v1 = split_sat_value_map[v1]
                 v2 = split_sat_value_map[v2]
             d1.append(v1)
@@ -825,7 +852,7 @@ def pb_solver( options ):
     debug               = options.debug
     local_check_samples = options.local_check_samples
     
-    utils.print_verbose(options,-1,f'Running the solver with precision level:', options.precision)
+    utils.print_verbose(options,0,f'Running the solver with precision level', options.precision)
 
     # --------------------------------------
     # Configure sensitive features
@@ -842,7 +869,9 @@ def pb_solver( options ):
             if  (i in features):
                 op_range_list2.append(op_range_list[i])
                 continue
-            list_item=(sample[i]-options.perturb,sample[i]+options.perturb)
+            perturb = e.get_perturb(i,sample[i])
+            # print(op_range_list[i],f"{sample[i]}+{perturb}")
+            list_item=(sample[i]-perturb,sample[i]+perturb)
             if math.isnan(op_range_list[i][0]) or math.isnan(op_range_list[i][1]):
                 op_range_list2.append(list_item)
             elif max(list_item[0],op_range_list[i][0])<=min(list_item[1],op_range_list[i][1]):
@@ -851,25 +880,40 @@ def pb_solver( options ):
             else:
                 op_range_list2.append(op_range_list[i])
         return op_range_list2
-
-    def runner(i,n,tupl):
-        utils.print_verbose(options, -1, "--==> Query", f"{i+1}/{n}")
+    
+    def runner(idx,n,tupl):
+        # print(f"\rQuery {i+1}/{n}  sensitive={state[0]}", end="", flush=True)
+        # if  options.n_jobs == 1:
+        #     bar_width = 30
+        #     filled = int(bar_width * (i + 1) / n)
+        #     bar = '█' * filled + ' ' * (bar_width - filled)
+        #     print(f"\r[{bar}] {(i+1)/n*100:.1f}%  Query {i+1}/{n} sensitive={state[0]}", end="", flush=True)
+            
+        if options.log_file:
+            log_path = os.path.join(options.log_folder, f"Query_{idx+1}.txt")
+            log_file = open(log_path, "w")
+        else:
+            log_file = None
+        utils.print_verbose(options, 0, "--==> Query", f"{idx+1}/{n}",log=log_file)
+            
         f = tupl[0]
         precision = tupl[1]
         op_range_list = tupl[2]
-        
+        options.current_sample = tupl[3] if len(tupl) > 3 else None
         start_time = time.time()
         def handler(signum, frame):
             raise Exception("end of time")
         # signal.signal(signal.SIGALRM, handler)
         # signal.alarm(options.timeout)
         # if True:
+        if options.current_sample is not None:
+            utils.print_verbose(options, 5, "Sample", options.current_sample, log=log_file)
+
         try:
             pair_point, solvingtime, region_pair = search_anomaly_for_features(
                 e,
                 f,
                 precision,
-                # truelabel,
                 e.n_classes,
                 e.model,
                 e.trees,
@@ -880,26 +924,26 @@ def pb_solver( options ):
                 options
             )
             # utils.print_info('Time:', solvingtime)
-        except Exception as err:
+        except (RuntimeError, ValueError) as err:
             utils.print_verbose(options,0,"Error:",err)
-            utils.print_verbose(options, -1, f"Insensitive", f)
-            utils.print_verbose(options, -1, "Time", f"{(time.time() - start_time)} seconds")
+            # utils.print_verbose(options, 0, f"Insensitive", f)
+            # utils.print_verbose(options, 0, "Time", f"{(time.time() - start_time)} seconds")
             return False
         timetaken = time.time() - start_time
         if region_pair != None:
-            utils.print_verbose(options,0,"region1",e.print_reg(region_pair[0]))
-            utils.print_verbose(options,0,"region2",e.print_reg(region_pair[1]))
+            utils.print_verbose(options,2,"region1",e.print_reg(region_pair[0]))
+            utils.print_verbose(options,2,"region2",e.print_reg(region_pair[1]))
             point1 = e.region2point(region_pair[0])
             point2 = e.region2point(region_pair[1])
             result = [point1, point2]
             vals = e.predict(result)
-            assert (vals[0] < 0.5) != (vals[1] < 0.5), "Error: both counter examples belong to the same class"
+                
             # print(f"********************************")
             result_copy = result[0].copy()
-            result_copy_2=copy.deepcopy(result)
+            # result_copy_2=copy.deepcopy(result)
             
-            utils.print_verbose(options,-1,'Sensitive', f)
-            utils.print_verbose(options,-1,'Time', timetaken)
+            utils.print_verbose(options,0,'Sensitive', f, log=log_file)
+            utils.print_verbose(options,0,'Time', timetaken, log=log_file)
             # print(f"Time {(time.time() - start_time)} seconds")
             if False:
                 for x in f:
@@ -910,73 +954,87 @@ def pb_solver( options ):
                     data_distance.compute_data_distance(result[0], f,
                                                         e.feature_names,
                                                         e.n_features,
-                                                        e.trees, options)
-                for x in f:
-                    result_copy_2[0][x] = (result_copy_2[0][x], result_copy_2[1][x])
-                    # result[0][x] = f"\033[91m{result[0][x]}\033[0m"  
-                    # result[1][x] = f"\033[91m{result[1][x]}\033[0m" 
-                    result[0][x] = f"{result[0][x]}"  
-                    result[1][x] = f"{result[1][x]}" 
+                                                        e.trees, options,
+                                                        weights=e.feature_weights)
+                # for x in f:
+                #     # result_copy_2[0][x] = (result_copy_2[0][x], result_copy_2[1][x])
+                #     result[0][x] = f"{result[0][x]}"  
+                #     result[1][x] = f"{result[1][x]}" 
+                colored_example =  utils.colour_example(result)
                 
+                utils.print_array_verbose( options, 0, 'Sensitive sample 1:', colored_example[0])
+                utils.print_array_verbose( options, 0, 'Sensitive sample 2:', colored_example[1])
+
+                # ----------------------
+                # Print log
+                # ----------------------
+                utils.print_array_verbose( options, 50, 'Sensitive sample 1:', result[0], log=log_file)
+                utils.print_array_verbose( options, 50, 'Sensitive sample 2:', result[1], log=log_file)
+
+            utils.print_verbose(options,0,'Output values:',vals,log=log_file)
+            if (vals[0] < 0.5) == (vals[1] < 0.5):
+                utils.print_error("Wrong result", "both counter examples belong to the same class")
                 
-                utils.print_array_verbose( options, -1, 'Sensitive sample 1:', result[0])
-                utils.print_array_verbose( options, -1, 'Sensitive sample 2:', result[1])
-                
-            utils.print_verbose(options,-1,'Output values:',vals)
-
-            output2=[]
-
-            # if options.local_check:
-            #     utils.print_array( 'Input sample:', local_check)
-            #     for i in range(0,len(result_copy_2[0])):
-            #         if isinstance(result_copy_2[0][i],tuple):
-            #             output2.append('NA')
-            #         else:
-            #             output2.append(result_copy_2[0][i]-local_check[i])
-            #     print('Difference matrix :',output2)            
-
             if options.plot:
-                plot_variations(model, result_copy, f, trees, feature_names, op_range_list)
-            return True
+                e.plot_variations( result_copy, f, op_range_list)
+            if log_file:
+                log_file.close()
+            return idx, True
         else:
-            utils.print_verbose(options,-1,"Insensitive", f)
-            utils.print_verbose(options,-1,'Time', timetaken)
-            return False
+            utils.print_verbose(options,0,"Insensitive", f, log=log_file)
+            utils.print_verbose(options,0,'Time', timetaken, log=log_file)
+            if log_file:
+                log_file.close()
+            return idx, False
         
     sense_sets = [features]
     if options.all_single: sense_sets = [ [f] for f in range(0, e.n_features) ]
-    
-    # if options.all_single:
-    #     tasks = [([f], options.precision, op_range_list) for f in range(0, e.n_features)]
-    # else:
-    #     tasks = [(features, options.precision, op_range_list)]
 
     tasks = [ (fs, options.precision, op_range_list) for fs in sense_sets]
 
+    
+    
     if options.local_check_samples:
-        if len(options.local_check_samples) == 0 or len(op_range_list) != len(options.local_check_samples[0]):
-            print('Errror number of input does not match with the number of the inputs of the model!')
-            exit()
+        # if len(options.local_check_samples) == 0 or len(op_range_list) != len(options.local_check_samples[0]):
+        #     utils.print_error( "Input", "#features in models does not match the #features in sample" )
         tasks = []
         for sample in options.local_check_samples:
             op_range_list2 = local_check_update_range( sample, op_range_list )
             for fs in sense_sets:
-                tasks.append((fs, options.precision, op_range_list2))
-            # if options.all_single:
-            #     for f in range(0, e.n_features):
-            #         tasks.append(([f], options.precision, op_range_list2))
-            # else:
-            #     tasks.append((features, options.precision, op_range_list2))
-        utils.print_verbose(options,-1,"Number of queries:", f" {len(sense_sets)}x {len(options.local_check_samples)}={len(tasks)}")
-
-
+                tasks.append((fs, options.precision, op_range_list2,sample))
+        utils.print_verbose(options,0,"Number of queries", f" {len(sense_sets)} x {len(options.local_check_samples)} = {len(tasks)}")
+        
             
-    if True: #len(tasks) < 5:
-        results = [runner(i,len(tasks),params) for i,params in enumerate(tasks)]
+    if len(tasks) < 5:
+        idx_results = [runner(i,len(tasks),params) for i,params in enumerate(tasks)]
+        results = [r for _, r in idx_results]
+        utils.sequential_logging(options,idx_results)
+        print()   
     else:
-        options.verbosity = options.verbosity-1
-        results = Parallel(n_jobs=-1)( delayed(runner)(i,params) for i,params in enumerate(tqdm.tqdm(tasks)) )
-        options.verbosity += 1
-    utils.print_verbose( options, -1, "Fraction of sensitive queries:", f"{sum(results)}/{len(results)}")
+        local_verbosity = options.verbosity
+        local_plot = options.plot
+        options.verbosity = -1
+        options.plot = False
+        results = []
+        batch   = []
+
+        with tqdm.tqdm(total=len(tasks)) as pbar:
+            for idx,r in Parallel(n_jobs=options.n_jobs, return_as="generator")(delayed(runner)(i,len(tasks),p) for i,p in enumerate(tasks)):
+                results.append(r)
+                batch.append((idx, r))
+                pbar.set_postfix(sensitive=sum(results)); pbar.update(1)
+                if batch and len(batch) >= options.n_jobs:
+                        utils.merge_batch(batch,options)
+                        batch = []
+        if batch:
+            utils.merge_batch(batch, options)
+            batch = []
+        print()
+        
+        options.verbosity = local_verbosity
+        options.plot = local_plot
+    if options.log_file and not options.debug and not options.no_remove:
+        os.rmdir(options.log_folder) 
+    utils.print_verbose( options, -1, "Fraction of sensitive queries", f"{sum(results)}/{len(results)}")
     # except multiprocessing.context.TimeoutError as e:
     #     print(f"Insensitive: {e}")

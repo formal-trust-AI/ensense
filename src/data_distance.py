@@ -117,59 +117,66 @@ def dist_segment(point1,point2, sensitive, segments):
         d += abs(s1idx-s2idx)
     return d
 
-def dist(point1,point2, sensitive):
+def dist(point1,point2, sensitive,weights=None):
     d = 0
     for i in range(len(point1)):
         if i in sensitive: continue
-        if point1[i] != point2[i]: d += interval_distanceL0(point1[i],point2[i])
+        if point1[i] != point2[i]: 
+            w = 1.0 if weights is None else weights[i]
+            d += w * interval_distanceL0(point1[i],point2[i])
     return d
 
-def distL1(point1,point2, sensitive):
-    d = 0
-    # print(point1,point2,sensitive)
-    for i in range(len(point1)):
-        if i in sensitive: continue
-        if point1[i] != point2[i]: d = d +  interval_distanceL1(point1[i],point2[i]) # (point1[i] - point2[i])**2 
-    dis = math.sqrt(d)
-    # print('L2 distance:', dis)
-    return dis
-
-
-def distLinf(point1,point2, sensitive):
+def distL1(point1,point2, sensitive,weights=None):
     d = 0
     # print(point1,point2,sensitive)
     for i in range(len(point1)):
         if i in sensitive: continue
         if point1[i] != point2[i]: 
-            distt =  interval_distanceLinf(point1[i],point2[i]) # (point1[i] - point2[i])**2 
-            if distt > d:
-                d = distt
-    dis = math.sqrt(d)
-    # print('L2 distance:', dis)
-    return dis
+            w = 1.0 if weights is None else weights[i]
+            d += w * interval_distanceL1(point1[i],point2[i]) # (point1[i] - point2[i])**2 
+    # dis = math.sqrt(d)
+    # print('L1 distance:', dis)
+    return d
 
 
-def distL2(point1,point2, sensitive):
+def distLinf(point1,point2, sensitive,weights=None):
     d = 0
     # print(point1,point2,sensitive)
     for i in range(len(point1)):
         if i in sensitive: continue
-        if point1[i] != point2[i]: d = d +  interval_distance(point1[i],point2[i]) # (point1[i] - point2[i])**2 
+        if point1[i] != point2[i]: 
+            w = 1.0 if weights is None else weights[i]
+            distt = w * interval_distanceLinf(point1[i],point2[i]) # (point1[i] - point2[i])**2 
+            if distt > d:
+                d = distt
+    # dis = math.sqrt(d)
+    # print('Linf distance:', dis)
+    return d
+
+
+def distL2(point1,point2, sensitive,weights=None):
+    d = 0
+    # print(point1,point2,sensitive)
+    for i in range(len(point1)):
+        if i in sensitive: continue
+        if point1[i] != point2[i]: 
+            w = 1.0 if weights is None else weights[i]
+            d += w* interval_distance(point1[i],point2[i]) # (point1[i] - point2[i])**2 
     dis = math.sqrt(d)
     # print('L2 distance:', dis)
     return dis
 
 
-def data_distance(data, points, sensitive, segments = {}, dist_type = "l0"):    
+def data_distance(data, points, sensitive, segments = {}, dist_type = "l0",weights=None):    
     def find_min(dist_measure):
         min_d,min_point = float("inf"), None
         min_d2,min_point2 = float("inf"), None
         for index, row in data.iterrows():
             pointp = row.to_list()
-            d = dist_measure(points[0], pointp, sensitive)
+            d = dist_measure(points[0], pointp, sensitive,weights)
             if d < min_d: min_d, min_point = d, pointp
             if len(points) > 1:
-                d2 = dist_measure(points[1], pointp, sensitive)
+                d2 = dist_measure(points[1], pointp, sensitive,weights)
                 if d2 < min_d2: min_d2, min_point2 = d2, pointp
         if len(points) > 1 and min_d2 < min_d:
             return (1,min_d2,min_point2)
@@ -204,7 +211,7 @@ def data_distance(data, points, sensitive, segments = {}, dist_type = "l0"):
     print('Nearest point in data:', min_point)
     print('===========================================================')
 
-def compute_data_distance( points, f, feature_names, n_features, trees, options):
+def compute_data_distance( points, f, feature_names, n_features, trees, options,weights=None):
     dist_type = options.metric
     if not isinstance(points[0], list): points = [points]
     assert(len(points[0]) == len(feature_names))
@@ -223,9 +230,9 @@ def compute_data_distance( points, f, feature_names, n_features, trees, options)
         # dist_type = "L0"
         if dist_type == "Segmentl1":
             segments = utils.feature_segments(trees,n_features)
-            data_distance( data, points, f, segments=segments, dist_type="SegmentL1" )
+            data_distance( data, points, f, segments=segments, dist_type="SegmentL1" ,weights=weights)
         else:
-            data_distance( data, points, f, dist_type=dist_type) 
+            data_distance( data, points, f, dist_type=dist_type,weights=weights) 
     else:
         print("No data file is provided!")
 

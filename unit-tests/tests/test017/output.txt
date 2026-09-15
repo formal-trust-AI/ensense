@@ -1,13 +1,13 @@
-# Model name: models/tree_verification_models/breast_cancer_robust/0004.resaved.json
-# Trees per class: 4
-# Number of classes: 1
-# Number of features: 11
-# Base score: 0.5
-# Max depth: 5
-# Feature names: {0: 'f0', 1: 'f1', 2: 'f2', 3: 'f3', 4: 'f4', 5: 'f5', 6: 'f6', 7: 'f7', 8: 'f8', 9: 'f9', 10: 'f10'}
+# Model name : models/tree_verification_models/breast_cancer_robust/0004.resaved.json
+# Trees per class : 4
+# Number of classes : 1
+# Number of features : 11
+# Base score : 0.5
+# Max depth : 5
+# Feature names : {0: 'f0', 1: 'f1', 2: 'f2', 3: 'f3', 4: 'f4', 5: 'f5', 6: 'f6', 7: 'f7', 8: 'f8', 9: 'f9', 10: 'f10'}
 # --==> Query : 0
-# Sensitive features : [5, 7]
-# Time : 0.00017475499771535397
-Sensitive sample 1:[ 0.5 , 0.5 , 0.1944445075 , 0.3055555225 , 0.1944445075 , [91m0.444444507[0m , 0.25 , [91m0.388889015[0m , 0.5 , 0.1944445075 , 0.1944445075 ]
-Sensitive sample 2:[ 0.5 , 0.5 , 0.1944445075 , 0.3055555225 , 0.1944445075 , [91m0.388889015[0m , 0.25 , [91m0.1944445075[0m , 0.5 , 0.1944445075 , 0.1944445075 ]
-Output Values: [0.7120103] [0.23185314]
+# Sensitive : [5, 7]
+# Time : 0.00020393397426232696
+# Output values: : [0.7120103240013123, 0.23185314238071442]
+
+# Fraction of sensitive queries: : 1/1

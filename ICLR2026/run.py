@@ -1,248 +1,229 @@
 #!/usr/bin/env python3
-"""Unit-test runner for TriST sensitivity workflows."""
 
-from __future__ import annotations
-
+import pandas as pd
 import argparse
-import os
-import subprocess
-import sys
-from dataclasses import dataclass
 from pathlib import Path
-import random
-from modeldetails import MODELDETAILS, GAP_LB, GAP_UB
+import itertools
+import subprocess
+import json
+import re
 
-ROOT = Path(__file__).resolve().parents[1]
-SENSITIVE = ROOT / "src" / "sensitive.py"
+modelTrees = { 
+              'breast_cancer' : '0004',
+                'covtype'       : '0080',
+                'diabetes'      : '0020',
+                'fashion'       : '0200',
+                'ijcnn'         : '0060',
+                'ori_mnist'     : '0200',
+                'webspam'       : '0100',
+}
 
-#! running it for same gap lb and ub .. need to think to convert gap -> lb and ub
+modelFeature = {
+    'adult' : 15 ,
+    'churn' : 21 ,
+    'pimadiabetes': 9,
+    'winequality_red':11,
+    'iris':4,
+    'german_credit':20
+}
 
-@dataclass
-class TestCase:
-    name: str
-    args: list[str]
+multimodel = ['covtype','fashion','ori_mnist','iris','winequality_red']
 
-def _feature_set(model_cfg: dict[str, object]) -> tuple[str, list[str]]:
-    # includes only single testing
-    total_features = int(model_cfg.get("feature", 0))
-    if total_features <= 0:
-        sys.exit(1)
-    feature_list = [f for f in range(0,total_features)]
-    single_options = feature_list
-    multi_options = [single_options]    
-    return single_options, multi_options
 
-def _output_gap(gap) -> tuple[str, str]:
-    gap_options = []
-    lb = str(random.choice(GAP_LB))
-    ub = str(random.choice(GAP_UB))
-    gap_options.append([lb,ub])
-    return gap_options
-    
-def one_cases(model_name: str,mode,timeout=100) -> list[TestCase]:
-    model = MODELDETAILS[model_name]
-    single_feat, multi_feats = _feature_set(model)
-    single_baselist = [model["model"], "--features", single_feat, '--timeout', str(timeout)]
-    multi_baselist = [model["model"], "--features", *multi_feats, '--timeout', str(timeout)]
-    lb,ub = _output_gap()
-    core = [
-        # basic
-        TestCase(f"{mode}.{model_name}.singlefeat", single_baselist),
-        TestCase(f"{mode}.{model_name}.multifeat", multi_baselist),
-        #for detail file
-        TestCase(f"{mode}.{model_name}.singlefeat_details", single_baselist + 
-                 ["--details", model["details"]],
-        ),
-        TestCase(f"{mode}.{model_name}.multifeat", multi_baselist + 
-                 ["--details", model["details"]],
-        ),
-        # for allopt
-        TestCase(
-            f"{mode}.{model_name}.singlefeat_allopt", single_baselist +
-            [
-                "--details", model["details"], "--all_opt",
-            ],
-        ),
-        TestCase(
-            f"{mode}.{model_name}.multifeat_allopt", multi_baselist +
-            [
-                "--details", model["details"], "--all_opt",
-            ],
-        ),
-        # for prob-data-aware
-        TestCase(
-            f"{mode}.{model_name}.singlefeat_allopt", single_baselist +
-            [
-                "--details", model["details"], "--all_opt", "--prob",
-                "--output_gap", lb, ub,
-                "--compute_data_distance", "--data_file", model["data"],
-            ],
-        ),
-        TestCase(
-            f"{mode}.{model_name}.multifeat_allopt", multi_baselist +
-            [
-                "--details", model["details"], "--all_opt", "--prob",
-                "--output_gap", lb, ub,
-                "--compute_data_distance", "--data_file", model["data"],
-            ],
-        ),
-        # for clause-data-aware
-        TestCase(
-            f"{mode}.{model_name}.singlefeat_allopt", single_baselist +
-            [
-                "--details", model["details"], "--all_opt",
-                "--output_gap", lb, ub,
-                "--in_distro_clauses", model["clause"],
-                "--compute_data_distance", "--data_file", model["data"],
-            ],
-        ),
-        TestCase(
-            f"{mode}.{model_name}.multifeat_allopt", multi_baselist +
-            [
-                "--details", model["details"], "--all_opt",
-                "--output_gap", lb, ub,
-                "--in_distro_clauses", model["clause"],
-                "--compute_data_distance", "--data_file", model["data"],
-            ],
-        ),
-        # for prob-clause-data-aware
-        TestCase(
-            f"{mode}.{model_name}.singlefeat_allopt", single_baselist +
-            [
-                "--details", model["details"], "--all_opt",
-                "--output_gap", lb, ub,
-                "--prob",
-                "--in_distro_clauses", model["clause"],
-                "--compute_data_distance", "--data_file", model["data"],
-            ],
-        ),
-        TestCase(
-            f"{mode}.{model_name}.multifeat_allopt", multi_baselist +
-            [
-                "--details", model["details"], "--all_opt",
-                "--output_gap", lb, ub,
-                "--prob",
-                "--in_distro_clauses", model["clause"],
-                "--compute_data_distance", "--data_file", model["data"],
-            ],
-        ),
-        
+CURRENT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = CURRENT_DIR.parent
+BENCHMARKPATH = ROOT_DIR / 'models'
+
+benchmarks = [ 
+    ("breast_cancer","robust"),
+    ("breast_cancer","unrobust"),
+    # ("diabetes","robust"),
+    ("diabetes","unrobust"),
+    # ("ijcnn","robust"),
+    ("ijcnn","unrobust"),
+    # ("adult",'t200_d5'),
+    ("adult",'t300_d5'),
+    # ("adult",'t500_d5'),
+    # ("adult",'t200_d6'),
+    # ("adult",'t300_d6'),
+    # ("adult",'t500_d6'),
+    # ("adult",'t200_d5'),
+    # ("churn",'t300_d5'),
+    ("churn",'t500_d5'),
+    # ("churn",'t200_d6'),
+    # ("churn",'t300_d6'),
+    # ("churn",'t500_d6'),
+    # ("pimadiabetes",'t200_d5'),
+    # ("pimadiabetes",'t300_d5'),
+    ("pimadiabetes",'t500_d5'),
+    # ("pimadiabetes",'t200_d6'),
+    # ("pimadiabetes",'t300_d6'),
+    # ("pimadiabetes",'t500_d6'),
+    ("german_credit",'t500_d5'),
+    # ("german_credit",'t800_d5'),
+    # ("german_credit",'t500_d6'),
+    # ("german_credit",'t800_d6'),
+    # ("covtype","robust"),
+    # ("covtype","unrobust"),
+    # ("fashion","robust"),
+    # ("fashion","unrobust"),
+    # ("ori_mnist","robust"),
+    ("ori_mnist","unrobust"),
+    ("iris","t100_d5"),
+    ("winequality_red","t100_d5")
     ]
-    return core
 
 
-def pb_cases(model_name: str,timeout:int) -> list[TestCase]:
-    core = one_cases(model_name,"pb",timeout)
-    addition = ["--solver", "pb"]
-    for test in core:
-        test.args = test.args + addition
-    return core
 
-def milp_cases(model_name:str,timeout) -> list[TestCase]:
-    core = one_cases(model_name,"milp",timeout)
-    addition = ["--solver", "milp"]
-    for test in core:
-        test.args = test.args + addition
-    return core
+def model_files(modelname, modeltype):
+    trees = None
+    if modelname in modelTrees:
+        trees = modelTrees[modelname]
+    no_feature = 0
+    featlist = []
+    if modelname in modelTrees:
+        if modelname in multimodel:
+            with open(f'{BENCHMARKPATH}/tree_verification_models/{modelname}_{modeltype}/feat_imp.json', 'r') as f:
+                feat_file = json.load(f)
+            featlist = [ t[1:] for t in list(feat_file.keys())[:100]]
+        else:
+            details_path = BENCHMARKPATH / f"dataset/{modelname}/{modelname}_details.csv"
+            no_feature = pd.read_csv(details_path, index_col=0).shape[0]
+            featlist = [f for f in range(no_feature)]
+    elif modelname in modelFeature.keys():
+            no_feature = modelFeature[modelname]
+            featlist = [f for f in range(no_feature)]
+    else:
+        print(f"feat info missing")
+        exit()
+
+    if modelname in modelTrees:
+        model_file = f"models/tree_verification_models/{modelname}_{modeltype}/{trees}.resaved.json"
+    else:
+        model_file = f"models/{modelname}/{modelname}_{modeltype}.json"
     
-def _run_case(case: TestCase, dry_run: bool, verbose: bool,timeout:int) -> int:
-    cmd = [sys.executable, str(SENSITIVE), *case.args]
-    print(f"[RUN] {case.name}")
-    print("      " + " ".join(cmd))
-    if dry_run:
-        return 0
+    detail_file = f"models/dataset/{modelname}/{modelname}_details.csv"
+    if modelname in modelFeature:
+        detail_file = f"models/dataset/{modelname}/details.csv"
+    
+    data_file = f"models/dataset/{modelname}/{modelname}_train.csv"
+    if modelname in modelFeature:
+        data_file = f"models/dataset/{modelname}/train.csv"
 
-    env = os.environ.copy()
-    old_path = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = str(ROOT) if not old_path else f"{ROOT}:{old_path}"
+    clause_file = f"outputs/output/learned-clauses_{modelname}_{modeltype}.txt"
+    if modelname in modelFeature:
+        clause_file = f"outputs/output/learned-clauses_{modelname}_{modeltype}.txt"
+    multi = False
+    
+    if modelname in multimodel: multi = True
+    return model_file, featlist, detail_file, data_file, clause_file, multi
 
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            timeout=timeout+100,
-            env=env,
+
+def simple_test(model_file, featlist, detail_file, data_file, clause_file,multi=False):
+    feature_choices = [str(f) for f in featlist]
+    gap_choices = [("0.4", "0.6"), ("0.3", "0.7")]
+    solver_choices = ["pb", "milp"]
+
+    commands = []
+    for feature, (lgap, ugap), solver in itertools.product(feature_choices, gap_choices, solver_choices):
+        base = (
+            f"python ./src/sensitive.py {model_file} "
+            f"--features {feature} --output_gap {lgap} {ugap} "
         )
-    except subprocess.TimeoutExpired:
-        print(f"[FAIL] {case.name}")
-        return 1
+        if solver == "pb" and not multi:
+            commands.append(base + f" --solver pb --details {detail_file}")
 
-    if proc.returncode == 0:
-        print(f"[PASS] {case.name}")
-        return 0
+        if solver == "milp" and not multi:
+            commands.append(base + f" --details {detail_file}")
+            commands.append(base + f" --details {detail_file} --all_opt")
+            commands.append(base + f" --details {detail_file} --all_opt --prob --data_file {data_file}")
+            commands.append(base + f" --details {detail_file} --all_opt --compute_data_distance --data_file {data_file} --in_distro_clauses {clause_file}")
+            commands.append(base + f" --details {detail_file} --all_opt --prob --compute_data_distance --data_file {data_file} --in_distro_clauses {clause_file}")
+        if solver == 'milp' and multi:
+                commands.append(base + f" --multiclass --truelabel 1 --otherlabel 0")
+                commands.append(base + f" --all_opt --multiclass --truelabel 1 --otherlabel 0")
+    return commands
 
-    print(f"[FAIL] {case.name} (code={proc.returncode})")
-    if verbose:
-        if proc.stdout.strip():
-            print("------ stdout ------")
-            print(proc.stdout[-3000:])
-        if proc.stderr.strip():
-            print("------ stderr ------")
-            print(proc.stderr[-3000:])
-    return 1
-
-
-def _collect_cases(suite: str, model_name: str,timeout :int) -> list[TestCase]:
-    cases: list[TestCase] = []
-    if suite in ("pb", "all"):
-        cases.extend(pb_cases(model_name,timeout))
-    if suite in ("milp", "all"):
-        cases.extend(milp_cases(model_name,timeout))
-    #! TODO MONITOR
-    # for case in cases:
-    #     print(case)
-    # input()
-    return cases
-
-
-def _validate_model(model_name: str) -> None:
-    if model_name not in MODELDETAILS:
-        available = ", ".join(sorted(MODELDETAILS))
-        raise SystemExit(f"Unknown model '{model_name}'. Available: {available}")
-
-    required = {"model", "details", "data", "test", "feature", "clause"}
-    missing = required - set(MODELDETAILS[model_name].keys())
-    if missing:
-        raise SystemExit(
-            f"Model '{model_name}' is missing required keys in MODELDETAILS: {sorted(missing)}"
-        )
-
-def _list_models():
-    print("Available models:")
-    for name in sorted(MODELDETAILS):
-        print(f"  - {name}")
-    return
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run TriST command-line unit tests.")
-    parser.add_argument("--model", default="brcR", help="Model key from unit-tests/modeldetails.py")
-    parser.add_argument("--suite", choices=["milp", "pb", "all"], default="all")
-    parser.add_argument("--timeout",type=int,default=100,help="timeout")
-    parser.add_argument("--list-models", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--verbose", action="store_true")
+def arguments():
+    parser = argparse.ArgumentParser(description='Run experiments with specified model and type')
+    parser.add_argument('--modelname',default="",help='modelname')
+    parser.add_argument('--modeltype',default="",help='mdeltype')
+    parser.add_argument('--no_run', action='store_true', help='do not run generated commands')
+    parser.add_argument('--limit', type=int, default=None, help='Run/print only first N commands')
+    parser.add_argument('--show-output',action='store_true')
     args = parser.parse_args()
+    modelname = args.modelname
+    modeltype = args.modeltype
 
-    if args.list_models: _list_models()
-    _validate_model(args.model)
-    cases = _collect_cases(args.suite, args.model,args.timeout)
-    if not cases:
-        print("No test cases selected.")
-        return
+    return modelname, modeltype, args.no_run, args.limit, args.show_output
 
-    failed = 0
-    for case in cases:
-        rc = _run_case(case, args.dry_run, args.verbose,args.timeout)
-        failed += rc
-        if rc:
-            break
 
-    passed = len(cases) - failed
-    print(f"\nSummary: {passed}/{len(cases)} passed, {failed} failed")
-    if failed:
-        raise SystemExit(1)
+def parse_output(output):
+    dist = re.search(r"Distance from data distype L2:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", stdout)
+    distance = float(dist.group(1)) if dist else None
+    time = re.search(r"# Time:\s*:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", stdout)
+    timetaken = float(time.group(1)) if time else None
+    return distance, timetaken
+
+def runoutput(rc,stdout,stderr):
+    if rc != 0:
+        return { "modelname": modelname,
+                "modeltype": modeltype,
+                "options": c,
+                "distance": None,
+                "Time": None,
+                "output":stderr,
+        }
+    else:
+        distance, timetaken = parse_output(stdout)
+        return { "modelname": modelname,
+                "modeltype": modeltype,
+                "options": c,
+                "distance": distance,
+                "Time": timetaken,
+                "output":stdout
+        }
+
 
 if __name__ == "__main__":
-    main()
+    results = []
+    modelname, modeltype, no_run, limit, show_output = arguments()
+    if modelname == "" and modeltype == "":
+        print(f"Runing full benchmark")
+    elif modelname != "" and modeltype != "":
+        benchmarks = [(modelname,modeltype)]
+    else:
+        print(f"Error: missing modelname or modeltype")
+        exit()
+    for (modelname,modeltype) in benchmarks:
+        # print(modelname,modeltype)
+        model_file, featlist, detail_file, data_file, clause_file, multi = model_files(modelname, modeltype)
+        commands = simple_test(model_file, featlist, detail_file, data_file, clause_file, multi)
+        if limit is not None:
+            commands = commands[:limit]
+        passed = 0
+        failed = 0
+        if no_run:
+            for c in commands:
+                print(c)
+        else:
+            for c in commands:
+                if show_output: print(f"[RUN]: {c}")
+                res = subprocess.run(c, shell=True, cwd=str(ROOT_DIR),capture_output=True,text = True)
+                rc = res.returncode
+                stdout = res.stdout
+                stderr = res.stderr
+                if rc != 0:
+                    if show_output: print(stderr)
+                    failed += 1
+                    row = runoutput(rc,stdout,stderr)
+                else:
+                    if show_output: print(stdout)
+                    passed += 1
+                    row = runoutput(rc,stdout,stderr)
+                results.append(row)
+        print(f"{modelname}_{modeltype}: PASSED:{passed} FAILED: {failed}")
+    df = pd.DataFrame(results)
+    outputfile = CURRENT_DIR / 'iclr2026results.csv'
+    df.to_csv(outputfile)
+    print(f'file saved to {outputfile}')

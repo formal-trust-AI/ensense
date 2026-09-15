@@ -1,18 +1,18 @@
-# Model name: models/adult/adult_t200_d5.json
-# Trees per class: 200
-# Number of classes: 1
-# Number of features: 14
-# Base score: 0.24083011
-# Max depth: 5
-# Feature names: {0: 'age', 1: 'workclass', 2: 'fnlwgt', 3: 'education', 4: 'education-num', 5: 'marital-status', 6: 'occupation', 7: 'relationship', 8: 'race', 9: 'sex', 10: 'capital-gain', 11: 'capital-loss', 12: 'hours-per-week', 13: 'native-country'}
+# Model name : models/adult/adult_t200_d5.json
+# Trees per class : 200
+# Number of classes : 1
+# Number of features : 14
+# Base score : 0.24083011
+# Max depth : 5
+# Feature names : {0: 'age', 1: 'workclass', 2: 'fnlwgt', 3: 'education', 4: 'education-num', 5: 'marital-status', 6: 'occupation', 7: 'relationship', 8: 'race', 9: 'sex', 10: 'capital-gain', 11: 'capital-loss', 12: 'hours-per-week', 13: 'native-country'}
 # --==> Query : 0
 featureDict {0: 'age', 1: 'workclass', 2: 'fnlwgt', 3: 'education', 4: 'education-num', 5: 'marital-status', 6: 'occupation', 7: 'relationship', 8: 'race', 9: 'sex', 10: 'capital-gain', 11: 'capital-loss', 12: 'hours-per-week', 13: 'native-country'}
-# Sensitive features : [5, 11]
-# Time : 5.146504946984351
+# Sensitive : [5, 11]
+# Time : 5.269892863987479
 ================== Data conformity analysis ===============
 Distance from data distype l2: 0.0
 Nearest point in data: [((-0.9452054799, 2.0), 0.3561643835616437), ((-0.875, 2.0), 0.75), ((-0.99219448259, 1.404479027), 0.0569429918094022), ((-0.9333333299, 2.0), 0.0666666666666666), ((-0.799999997, 2.0), 0.4), '__', ((-0.9285714254, 2.0), 0.4285714285714285), ((-0.799999997, 2.0), 0.0), ((-0.75, 2.0), 1.0), ((0.0, 2.0), 1.0), ((-0.99885998864, 1.220402211), 0.0), '__', ((-0.9591836743, 2.0), 0.6020408163265305), ((-0.975609757, 1.951219499), 0.951219512195122)]
 ===========================================================
-Sensitive sample 1:[ 0.273972601 , 0.5 , 0.0916674584 , 0.533333361 , 0.733333349 , 0.166666672 , 0.214285716 , 0.1000000015 , 0.5 , 0.5 , 0.00057000568 , [91m0.433195591[0m , 0.397959173 , 0.341463417 ]
-Sensitive sample 2:[ 0.273972601 , 0.5 , 0.0916674584 , 0.533333361 , 0.733333349 , 0.166666672 , 0.214285716 , 0.1000000015 , 0.5 , 0.5 , 0.00057000568 , [91m0.02444903555[0m , 0.397959173 , 0.341463417 ]
-Output Values: [0.92593455] [0.2347579]
+# Output values: : [0.9259345531463623, 0.2347579002380371]
+
+# Fraction of sensitive queries: : 1/1

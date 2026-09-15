@@ -1,3 +1,7 @@
+import os
+import warnings
+warnings.filterwarnings("ignore")
+os.environ.setdefault("PYTHONWARNINGS", "ignore")
 import lightgbm
 import pickle
 import joblib
@@ -10,7 +14,8 @@ import math
 import pandas as pd
 import numpy as np
 import json
-import math
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 pd.set_option('display.max_rows', 200)
 
@@ -40,10 +45,12 @@ class Ensemble:
         self.n_classes =None
         self.base_score = None
         self.feature_names = None
+        self.feature_types = None
         self.op_range_list = None
         self.depth = None
         self.split_kind = "<"
         self.multiclass = False
+        self.guard_lists = {}
 
     
     def load_file(self):
@@ -65,11 +72,10 @@ class Ensemble:
             self.model = xgb.Booster({"nthread": 4})  # init model
             self.model.load_model(self.model_file)  # load data
         else:
-            print("Failed to indentify the file type!")
-            exit()
-            
+            utils.print_error("input", "Failed to indentify the model type!")
 
     def print_vitals(self):
+        # utils.print_verbose(self.options, 1, "Model name", self.model_file)
         data = [
             ("Model name", self.model_file),
             ("Trees per class", self.n_trees),
@@ -79,8 +85,13 @@ class Ensemble:
             ("Max depth", self.depth),
             ("Feature names", self.feature_names),
         ]
-        for label, value in data: print(f"# {label}: {value}")
-        
+        for label, value in data:
+            utils.print_verbose(self.options, 0, label, value)
+        for f in range(self.n_features):
+            utils.print_verbose(self.options, 4, f"Guards of f{f}", self.get_guard_list(f,self.op_range_list))
+
+    def unsupported_model(self):
+        utils.print_error( "internal", f'Cannot load model for library {self.model_library} yet!')
 
     def load( self, model_file=None, print_vitals = False, *arg ):
         if model_file  != None: self.model_file = model_file
@@ -100,10 +111,12 @@ class Ensemble:
             self.model_library = "xgboost"
         elif( isinstance(self.model, lightgbm.basic.Booster) ):
             self.model_library = "lgbm"
+        elif( isinstance(self.model, lightgbm.sklearn.LGBMClassifier) ):
+            self.model.booster_.save_model( '/tmp/model.txt' )
+            self.model = lightgbm.Booster( model_file= '/tmp/model.txt' )
+            self.model_library = "lgbm"
         else:
-            print(type(self.model))
-            print("Unindentified model type!")
-            exit()
+            utils.print_error( "input", f"Tool does not support model of type {type(self.model)}")
             
             
         if self.model_library == "xgboost":
@@ -138,9 +151,13 @@ class Ensemble:
             # --------------------------------
             try:
                 model_json = json.loads(self.model.save_config())
-                self.base_score = float(model_json['learner']['learner_model_param']['base_score'])
-            except:
-                self.base_score = 0.5
+                # a list: one entry for binary, one per class for multiclass
+                self.base_score = utils.parse_base_score(
+                    model_json['learner']['learner_model_param']['base_score'])
+            except KeyError:
+                self.base_score = [0.5]   # model family carries no base_score
+            except (ValueError, TypeError) as e:
+                utils.print_error("Model", f"could not parse base_score: {e}")
 
             # ---------------------------------------------------------
             # Compute the number of classes and assign trees to classes
@@ -205,7 +222,7 @@ class Ensemble:
             self.base_score = self.n_trees/2
             self.split_kind = "<="
         else:
-            print(f'Cannot load model for library {self.model_library} yet!')
+            utils.print_error( "internal", f'Cannot load model for library {self.model_library} yet!')
 
         # ---------------------------------------------------------
         # Adjust the number of trees to consider
@@ -238,12 +255,15 @@ class Ensemble:
 
         # -----------------------------------------------------------
         # More information about the model from another file
-        # -----------------------------------------------------------            
+        # -----------------------------------------------------------   
+        self.feature_weights = [1.0] * self.n_features         
         if self.details_file:
-            feature_names, self.op_range_list= utils.model_details_file(self.n_features, self.details_file)
+            feature_names, self.op_range_list, self.feature_types,self.feature_weights = utils.model_details_file(self.n_features,
+                                                                                            self.details_file)
             assert(len(feature_names) == self.n_features)
         else:
             feature_names = {i: f"{i}" for i in range(self.n_features)}
+            
         # --------------------------------------------------------------
         # Update feature names only if model does not provide feature names
         # --------------------------------------------------------------
@@ -256,14 +276,10 @@ class Ensemble:
         self.multiclass = self.options.multiclass
         if self.options.multiclass:
             if self.n_classes < 3:
-                print("Less than three output classes!")
-                exit()
-                # self.options.multiclass = False
+                utils.print_error( "input", "Less than three output classes for multiclass!")
         else:
             if self.n_classes != 1:
-                print("Model is not binary classifier use multiclass options!")#Switiching to multiclass analysis!")
-                exit()
-                # self.options.multiclass = True
+                utils.print_error( "arguments", "Model is not binary classifier use multiclass options!")
 
         # --------------------------------------
         # Modify options after loading the model
@@ -273,27 +289,47 @@ class Ensemble:
         # milp solver does not necessarily need precision, but pb solver needs precision   
         # ------------------------------------------------------------------------------
         if (self.options.precision == None or self.options.precision == 0) and self.options.solver != 'milp':
-            self.options.precision = max(3*self.n_trees,100)
+            self.options.precision = max(5*self.n_trees,100)
             
         # ------------------------------------------------------------------------------
         # Modify sensitive features
         # ------------------------------------------------------------------------------
-        if self.options.all_features: options.features = [i for i in range(self.n_features)]
+        if self.options.all_features:
+            self.options.features = [i for i in range(self.n_features)]
         
         # --------------------------------------
         # Print vitals
         # --------------------------------------
         if print_vitals == True:
             self.print_vitals()
-            
+
+        # --------------------------------------------
+        # Check if sensitive features are in the range
+        # --------------------------------------------
+        for f in self.options.features:
+            if f < 0 or f >= self.n_features:
+                utils.print_error( "arguments", "Sensitive features are out of range!" )
+                
+        # --------------------------------------
+        # Generate random samples if needed
+        # --------------------------------------
+        if self.options.random_samples > 0 and self.options.local_check_samples == None:
+            np.random.seed(self.options.seed)
+            self.options.local_check_samples = [
+                [ self.get_sample(i) for i in range(self.n_features)]
+                for _ in range(self.options.random_samples)
+            ]
+            utils.print_verbose( self.options,5, f'Random samples:', self.options.local_check_samples )
+
+        # ------------------------------------------
+        # Check if read samples match the model!!
+        # ------------------------------------------
+        if self.options.local_check_samples != None and self.n_features != len(self.options.local_check_samples[0]):
+            utils.print_error( "Input", "#features in models does not match the #features in sample" )
+
+        utils.print_verbose( self.options,7,f'Gap values:', f"{self.options.lgap} {self.options.ugap}")
         if self.options.verbosity > 7:
-            print(f"Gap values {self.options.lgap} {self.options.ugap}\n")
             self.dump_to_dot()
-        # if self.options.verbosity:         
-        #     data = [ np.random.rand(self.n_features).tolist() for i in range(0,50)]
-        #     print(data)
-        #     r = self.predict(data)
-        #     exit()
 
 
     def get_root_name(self):
@@ -302,32 +338,37 @@ class Ensemble:
         return 0
 
     def get_base_value(self):
-        if self.model_library == "xgboost":
-            return utils.sigmoid_inv(self.base_score)
+        if self.model_library in ("xgboost", "lgbm"):
+            base = np.ravel(self.base_score).astype(float)
+            if self.n_classes and self.n_classes > 1:
+                # softmax uses the identity link: class k's margin gets + base[k]
+                # (verified against xgboost: margin - sum(leaves) == base_score)
+                if base.size == 1:
+                    return [float(base[0])] * self.n_classes
+                if base.size != self.n_classes:
+                    utils.print_error("Model", f"base_score has {base.size} entries "
+                                               f"for {self.n_classes} classes")
+                return [float(v) for v in base]
+            # binary uses the logistic link, so base_score is a probability
+            return utils.sigmoid_inv(float(base[0]))
         elif self.model_library == "rf":
             return -self.n_trees/2
-        elif self.model_library == "lgbm":
-            return utils.sigmoid_inv(self.base_score)
         else:
-            print(f"Unsupported {self.model_library} for base value")
-            exit()
+            self.unsupported_model()
 
     def get_interpret_gap(self, lgap, ugap ):
         if self.model_library == "xgboost":
             if lgap <= 0 or ugap >= 1:
-                print(f"Gap [{lgap},{ugap}] is out of range!")
-                exit()
+                utils.print_error( "arguments", f"Gap [{lgap},{ugap}] is out of range!")
             return utils.sigmoid_inv( lgap ), utils.sigmoid_inv( ugap )
         elif self.model_library == "rf":
             return ( (lgap-0.5)*self.n_trees, (ugap-0.5)*self.n_trees)
         elif self.model_library == "lgbm":
             if lgap <= 0 or ugap >= 1:
-                print(f"Gap [{lgap},{ugap}] is out of range!")
-                exit()
+                utils.print_error( "arguments", f"Gap [{lgap},{ugap}] is out of range!")
             return utils.sigmoid_inv( lgap ), utils.sigmoid_inv( ugap )
         else:
-            print(f"Unsupported {self.model_library} for gap")
-            exit() 
+            self.unsupported_model()
 
     
     # TODO: make this work
@@ -527,7 +568,7 @@ class Ensemble:
                 class_nodes.append((vals,nodes))
             if self.n_classes == 1:
                 if self.model_library == "xgboost":
-                    s = class_vals[0]+utils.sigmoid_inv(self.base_score)
+                    s = class_vals[0]+utils.sigmoid_inv(self.base_score[0])
                     output = round(1.0 / (1.0 + math.exp(-s)), 7)
                 elif self.model_library == "rf":
                     if class_vals[0] < (self.n_trees/2):
@@ -535,13 +576,15 @@ class Ensemble:
                     else:
                         output = 0
                 elif self.model_library == "lgbm":
-                    s = class_vals[0]+utils.sigmoid_inv(self.base_score)
+                    s = class_vals[0]+utils.sigmoid_inv(self.base_score[0])
                     output = round(1.0 / (1.0 + math.exp(-s)), 7)
                 else:
-                    print(f"Unsupported {self.model_library}")
-                    exit()
+                    self.unsupported_model()
             else:
-                output = np.argmax(class_vals)
+                # a per-class base shifts each margin by a different amount, so it
+                # only drops out of the argmax when every entry is identical
+                base = np.asarray(self.get_base_value(), dtype=float)
+                output = np.argmax(np.asarray(class_vals, dtype=float) + base)
             if verbose: output = (output,class_vals,class_nodes)                
             outputs.append( output )
         return outputs
@@ -573,10 +616,12 @@ class Ensemble:
                 continue
             
             if not lb_open: 
+                if math.ceil(lb) < ub: lb = math.ceil(lb)
                 point[idx] = lb
                 continue
             
             if not ub_open:
+                if math.floor(ub) > lb: ub = math.floor(ub)
                 point[idx] = ub
                 continue
             
@@ -605,6 +650,116 @@ class Ensemble:
         data +=" ]"
         return data
                     
+    def get_sample(self, f):
+        typ     = self.feature_types[f]
+        lb,ub   = self.op_range_list[f]
+        if typ == 'linear':
+            return np.random.uniform(lb, ub)
+        elif typ == 'log':
+            return np.exp( np.random.uniform( np.log(lb), np.log(ub) ) ) 
+        elif typ in ('bool', 'categorical'):
+            return np.random.choice([0, 1])
+        else:
+            print('Urecognized feature type')
+            assert(False)
+            
+    def get_perturb(self, f, val):
+        typ     = self.feature_types[f]
+        lb,ub   = self.op_range_list[f]
+        perturb = self.options.perturb
+        if typ == 'linear':
+            return perturb*(ub-lb)
+        elif typ == 'log':
+            return perturb*(np.log(ub)-np.log(lb))*val
+        elif typ in ('bool', 'categorical'):
+            return 2 # Ensures 0 1 range in the final
+        else:
+            print('Urecognized feature type')
+            assert(False)
+            
+    def get_guard_list( self, f, op_range_list = None):
+        update_list = False
+        if op_range_list == None:
+            op_range_list = self.op_range_list
+            if f in self.guard_lists:
+                return self.guard_lists[f]
+            else:
+                update_list = True
+        trees = self.trees
+        sliced = trees[(trees["Feature"] == f"f{f}")][["Feature", "Split"]].copy()
+        sliced.sort_values(["Split"], inplace=True)
+        sliced.drop_duplicates(inplace=True)
+        sliced = sliced[(op_range_list[f][0] <= sliced["Split"]) & (sliced["Split"] <= op_range_list[f][1])]
+        glist = sliced["Split"].tolist()
+        if update_list == True:
+            self.guard_lists[f] = glist
+        return glist
+        
+    def plot_variations(self, data, features, op_range_list):
+        if len(features) > 2:
+            features = features[0:2]
+        fvalues = []
+        for feature in features:
+            values = self.get_guard_list(feature, op_range_list)
+            if self.split_kind == '<':
+                values = [op_range_list[feature][0]] + values
+            else:
+                values = values + [op_range_list[feature][1]]
+            fvalues.append(values)
+
+        predictions = []
+        if len(fvalues) == 2:
+            for v in fvalues[1]:
+                data[features[1]] = v
+                rows = []
+                for f0 in fvalues[0]:
+                    data[features[0]] = f0
+                    rows.append(data.copy())
+                predict_col = self.predict(rows)
+                predictions.append(predict_col)
+        else:
+            rows = []
+            for f0 in fvalues[0]:
+                data[features[0]] = f0
+                rows.append(data.copy())
+            predict_col = self.predict(rows)
+            predictions.append(predict_col)
+
+        plt.style.use("_mpl-gallery")
+        if len(fvalues) == 1:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(fvalues[0], predictions[0], linewidth=2.0)
+            plt.ylabel("Predict")
+            plt.xlabel(self.feature_names[features[0]])
+        else:
+            fig = plt.figure(figsize=(10, 6))
+            ax = fig.add_subplot(projection="3d")
+            # ax = plt.figure().add_subplot(projection="3d",figsize=(10, 6))
+            X, Y = np.meshgrid(np.array(fvalues[0]), np.array(fvalues[1]))
+            Z = np.array(predictions)
+            ax.plot_surface(
+                X,
+                Y,
+                Z,
+                cmap=cm.Blues,
+                # edgecolor='royalblue',
+                # lw=0.5, #rstride=8, cstride=8,
+                # alpha=0.3
+            )
+            # ax.contour(X, Y, Z, zdir='z', offset=-100, cmap='coolwarm')
+            # ax.contour(X, Y, Z, zdir='x', offset=-40, cmap='coolwarm')
+            # ax.contour(X, Y, Z, zdir='y', offset=40, cmap='coolwarm')
+            ax.set(
+                xlabel=self.feature_names[features[0]],
+                ylabel=self.feature_names[features[1]],
+                zlabel="Predict",
+            )
+        plt.tight_layout()
+        if self.options.plot_file:
+            utils.print_verbose(self.options, 1, "Plot is saved in file", self.options.plot_file)
+            plt.savefig( self.options.plot_file, bbox_inches='tight', pad_inches=1.0, dpi=800 )
+        else:
+            plt.show()
 
     # def output(self,timetaken,sesnfeat, sensreg,outputvalues):
     #     print(f"# Time: {timetaken}")

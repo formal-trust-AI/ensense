@@ -2,9 +2,7 @@ import argparse
 import utils
 import pandas as pd
 import os
-
-SEED = 7
-
+import time
 class Options:
     def __init__(self):
         self.in_distro_clauses_file = ""
@@ -29,7 +27,10 @@ class Options:
         self.verbosity = 0
         self.local_check_file = None
         self.local_check_samples = None
-        self.timeout = 1200
+        self.prune        = False
+        self.numeric = False
+        self.categorical = False
+        self.timeout = 3600
         self.max_clauses = None
         self.objective = False
         self.unaffected_cons = False
@@ -38,19 +39,39 @@ class Options:
         self.all_features = False   
         self.compute_data_distance = False
         self.plot = False
+        self.plot_file = None
         self.features = [0]
         self.precision = 1000
         self.max_trees = None
         self.perturb = 0.1
         self.metric = None
-        self.pca_data = ""
-        self.pca_d = False
-
+        self.pca = False
+        self.pca_d = 0
+        self.limit_sens = -1
+        # self.random = False
+        self.random_samples = 0
+        self.seed = 7
+        self.n_jobs = 8
+        self.gowal = False
+        self.current_sample = None
+        self.binary_perturb = 0
+        self.log_stream = None
+        self.log_folder = None
+        self.no_remove = False
+        self.anchor = False
+        self.all_single = False
+        self.alpha = 0
+        self.spec = 'sens'
         
 def arguments_to_options(args):
     options=Options()
 
     options.solver = args.solver
+    options.spec = args.spec
+    if options.spec=='glitch' and options.solver != 'milp':
+        print("glitch only supports milp")
+        exit(1)
+    
     if args.solver == "naive_smt":
         options.encoding = "allsum"
     else:
@@ -59,19 +80,13 @@ def arguments_to_options(args):
     if args.sure_counterexamples: options.sureofcounter = True
     options.verbosity              = args.verbosity
     options.in_distro_clauses_file = args.in_distro_clauses
-    if options.in_distro_clauses_file and not os.path.exists(options.in_distro_clauses_file):
-        print(f"Input clauses file {options.in_distro_clauses_file} is missing!")
-        exit()
+    # utils.file_check(options.in_distro_clauses_file)
     options.data_file              = args.data_file
-    if options.data_file and not os.path.exists(options.data_file):
-        print(f"Data file {options.data_file} is missing!")
-        exit()
+    utils.file_check(options.data_file)
     options.model_library          = args.model_library 
     options.output_gap             = args.output_gap
     options.local_check_file       = args.local_check_file
-    if options.local_check_file and not os.path.exists(options.local_check_file):
-        print(f"Local check file {options.local_check_file} is missing!")
-        exit()
+    utils.file_check(options.local_check_file)
     options.timeout                = args.timeout
     options.max_trees              = args.max_trees
     
@@ -83,55 +98,76 @@ def arguments_to_options(args):
     options.small_change    = args.small_change
     options.compute_data_distance = args.compute_data_distance
     options.plot         = args.plot
+    options.plot_file    = args.plot_file
+    if options.plot_file: options.plot = True
     options.all_single   = args.all_single
+    options.limit_sens   = args.limit_sens
     options.strong_multi = args.strong_multi
     
     options.model_file   = args.filenum
-    if not os.path.exists(options.model_file):
-        print(f"Model file {options.model_file} is missing!")
-        exit()
+    utils.file_check(options.model_file)
     options.details_file = args.details
-    if options.details_file and not os.path.exists(options.details_file):
-        print(f"Details file {options.details_file} is missing!")
-        exit()
+    utils.file_check(options.details_file)
+
+    options.log_file = args.log
+    options.log_folder = args.log_folder
+    options.no_remove = args.no_remove
+    if options.log_file:
+        open(options.log_file, 'w').close() 
+        log_dir = options.log_folder + 'senstivity_' + time.strftime("%Y%m%d_%H%M%S")  
+        os.mkdir(log_dir)
+        options.log_folder = log_dir
+        
+        # utils.file_check( os.path.dirname(options.log_file) ) # todo:
+        # options.log_stream = open(options.log_file, "w")
+    # utils.open_log_file( options )
+    # if options.log_file and not os.path.exists( Path(options.log_file).parent ):
+    #     print( f"The path to the log file {options.details_file} is missing!" )
+    
+    if args.features != None:
+        options.features = args.features
+    elif args.solver != "glitch":
+        options.features = [0]
+        
     if args.features != None:
         options.features = args.features
     options.precision = args.precision
-    
+    options.alpha = args.alpha
     options.debug = args.debug
     options.prob = args.prob
     options.perturb = args.perturb
 
     options.metric = args.metric
-    options.pca_data = args.pca_data
+    options.pca = args.pca
     options.pca_d = args.pca_d
+    # options.random = args.random
+    options.random_samples = args.random_samples
+    options.seed = args.seed
+    options.n_jobs = args.n_jobs
+    options.gowal = args.gowal
+    options.binary_perturb = args.binary_perturb
+    options.numeric = args.numeric
+    options.categorical = args.categorical
+    options.prune        = args.prune
     if args.local_check_sample:
         options.local_check_samples    = [args.local_check_sample]
+    options.anchor = args.anchor
     
-    if args.local_check_file:
-        if options.local_check_samples:
-            print( f"Options local_check_file and local_check_samples must not be simultaneously given!")      
-        if not os.path.exists( f"{args.local_check_file}" ):
-            print( f"Local check file {args.local_check_file} is missing!")
-            exit()
+    utils.local_senstivity_check(options.random_samples,
+                        options.local_check_samples,
+                        options.local_check_file
+                        )
+    
+    if options.local_check_file:            
         local_samples = pd.read_csv( args.local_check_file )
         samples = []
         for index, row in local_samples.iterrows():
             samples.append( row.tolist() )
-        options.local_check_samples = samples
+        options.local_check_samples = samples[:1000]
     
     if options.output_gap != None:
         options.lgap = options.output_gap[0]
         options.ugap = options.output_gap[1]
-        # if options.model_library == "xgboost":
-        #     options.lgap = utils.sigmoid_inv( options.output_gap[0] )
-        #     options.ugap = utils.sigmoid_inv( options.output_gap[1] )
-        # elif options.model_library == "rf":
-        #     options.lgap = options.output_gap[0]-0.5
-        #     options.ugap = options.output_gap[1]-0.5
-        # else:
-        #     print(f"Unsupported {options.model_library}")
-        #     exit() 
     else:
         options.lgap = 0.5-0.2 # args.gap
         options.ugap = 0.5+0.2 # args.gap
@@ -145,6 +181,13 @@ def arguments_to_options(args):
         options.truelabel = -2  # Binary
         options.otherlabel = -2
         options.multiclass = False
+    
+    if options.prune:                                                                                                                                                                                            
+        if options.in_distro_clauses_file:                                                                                                                                                                       
+            utils.print_error("Options", "--prune is be combined with --in_distro_clauses")                                                                                                                  
+        if options.gowal:                                                                                                                                                                                        
+            utils.print_error("Options", "--prune is be combined with --gowal") 
+   
     return options
 
 def process_arguments():
@@ -169,9 +212,16 @@ def process_arguments():
     # Add the 'solver' argument with choices
     parser.add_argument(
         "--solver",
-        choices=["pb", "naive_smt", "rounding", "roundingsoplex", "milp", "veritas","monitor"],
+        choices=["pb", "naive_smt", "rounding", "roundingsoplex", "milp"],
         help="The solver to use. Choose either 'smt' or 'rounding'.",
     )
+    
+    parser.add_argument(
+            "--spec",
+            choices=["sens","monitor","glitch"],
+            default='sens',
+            help=" which spec you want to check.sens stands for senstivity",
+        )
 
     # Add the 'close' argument which is a boolean (true/false)
     parser.add_argument(
@@ -215,14 +265,28 @@ def process_arguments():
     parser.add_argument(
         "--all_single", action="store_true", help="run on all singular feature sets"
     )
+    
+    parser.add_argument(
+            "--limit_sens",
+            type=int,
+            default=-1,
+            help="put the limit on all_single, it will select the --limit_sens randomly from features",
+        )
+    
     parser.add_argument(
         "--prob", action="store_true", help="Activate probability objective"
+    )
+    
+    parser.add_argument(
+          "--prune",
+          action="store_true",
+          help="local search only: skip tree branches the perturbation box makes unreachable",
     )
 
     parser.add_argument(
         "--timeout",
         type=int,
-        default=1200,
+        default=3600,
         help="Timeout for each senstivity task",
     )
     
@@ -238,7 +302,28 @@ def process_arguments():
         default=-1,
         help="dataset index",
     )
-
+    # parser.add_argument(
+    #     "--random", action="store_true", help="to local senstivity on random data"
+    # )
+    parser.add_argument(
+        "--random_samples",
+        type=int,
+        default=0,
+        help="n0 of  random saamples for local senstivity",
+    )
+    
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=7,
+        help="Random seed for sampling",
+    )
+    parser.add_argument(
+        "--n_jobs",
+        type=int,
+        default=1,
+        help="parrallel queries for local senstivity",
+    )
 
     for (feature,help_text) in [
             ("all_features","Allow all features to change"),
@@ -255,8 +340,11 @@ def process_arguments():
         parser.add_argument(f"--{feature}", action="store_true", default=False, help=help_text)
         parser.add_argument(f"--no-{feature}", dest=f"{feature}", action="store_false")
 
-    parser.add_argument("--plot", action="store_true", help="plot the results")
+    parser.set_defaults(all_opt=True)
+    parser.add_argument("--plot", action="store_true", help="plot the results on display")
 
+    parser.add_argument("--plot_file",type=str, default=None, help="save the plot in a file" )
+    
     parser.add_argument(
         "--sure_counterexamples",
         action="store_true",
@@ -270,7 +358,7 @@ def process_arguments():
     parser.add_argument(
         "--output_gap",
         type=float,
-        nargs="+",
+        nargs=2,
         default=None,
         help="Give the expected gap in the probability of the model"
     )    
@@ -293,6 +381,25 @@ def process_arguments():
         nargs='+',
         default=None,
         help="input vector to check sensitivity in the vicinity"
+    )
+
+    parser.add_argument(
+          "--anchor",
+          action="store_true",
+          help="Anchored local sensitivity: the --local_check_sample point IS the second "
+               "witness; search for one counterfactual relative to it (use with --perturb 0)",
+      )
+    
+    parser.add_argument(
+        "--numeric",
+        action="store_true",
+        help="includes only numeric features in the sensitive features "
+    )
+    
+    parser.add_argument(
+            "--categorical",
+            action="store_true",
+            help="includes only categorical features in the sensitive features "
     )
 
     #local sensitivity argument added
@@ -319,6 +426,26 @@ def process_arguments():
     )
 
     parser.add_argument(
+        "--log",
+        type=str,
+        default= None, #'/tmp/senstivity/',
+        help="File where dump the log of run.",
+    )
+
+    parser.add_argument(
+        "--log_folder",
+        type=str,
+        default= '/tmp/',
+        help="Folder where all the log run are dumped.",
+    )
+    parser.add_argument(
+        "--no_remove",
+        action="store_true",
+        default= False,
+        help="do not delete the intermediate folder for storing logs",
+    )
+    
+    parser.add_argument(
         "--time",
         type=float,
         default=1e8,
@@ -335,20 +462,27 @@ def process_arguments():
         "--data_file",
         type=str,
         default="",
-        help="File containing data")
+        help="File containing training data")
+
+    # parser.add_argument(
+    #     "--pca_data",
+    #     type=str,
+    #     default="",
+    #     help="Training CSV used to fit PCA constraints",
+    # )
 
     parser.add_argument(
-        "--pca_data",
-        type=str,
-        default="",
-        help="Training CSV used to fit PCA constraints",
+        "--pca",
+        action="store_true",
+        help="Add PCA in-distribution constraints, fitted on --data_file",
     )
+
 
     parser.add_argument(
         "--pca_d",
-        action="store_true",
-        default=False,
-        help="Enable PCA constraints with auto-selected PCA dimension",
+        type=int,
+        default=0,
+        help=" provide  d otherwise d will be automatically selected",
     )
 
     parser.add_argument(
@@ -385,28 +519,43 @@ def process_arguments():
         default="l2",
         help="monitor:Distance metric for FRNN(linf or l2) /data-ware"
     )
+    parser.add_argument("--gowal",action='store_true',default=False,help="enable to include gowal distance")
+    parser.add_argument("--binary_perturb",type=int,default=0,help=" binary/categorical features' perturbation")
+    parser.add_argument("--warnings", action='store_true', default=False, help="Show Python warnings (hidden by default)")
+    parser.add_argument(
+        "--cmd",
+        action="store_true",
+        default= False,
+        help="print the command used to run the tool with the given arguments and exit",
+    )
+    #---------------------------
+    # glitch argument
+    #--------------------------
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=0,
+        help="glitch: the magnitude of the glitch to look for. 0 maximises it, "
+             "A>0 asks whether one of magnitude A exists. With --features the "
+             "search runs along that feature.",
+    )
     
     # Parse the arguments
     args = parser.parse_args()
+    if args.cmd:
+        import sys
+        print(" ".join(sys.argv))
     
     if args.solver == "monitor":
         if args.metric not in ["linf","l2"]:
             print(f"for monitor, select metric from linf,l2")
     
     if args.output_gap:
-        if ( len(args.output_gap) != 2 or
-             args.output_gap[0] >= 1 or args.output_gap[0] <= 0 or
-             args.output_gap[1] >= 1 or args.output_gap[1] <= 0) :
-            print("Incorrect inputs for output_gap option!")
-            print("Expected: --output_gap <lgap> <ugap>")
-            exit()
+        utils.output_gap_check(args.output_gap)
         if args.output_gap[1] < args.output_gap[0]:
             args.output_gap = [args.output_gap[1],args.output_gap[0]]
             
-    if args.truelabel >= 0 or args.otherlabel >= 0:
-        if not(args.truelabel >= 0 and args.multiclass):
-            print("Multi class option is not given!")
-            exit()
+    utils.multiclass_check(args.multiclass,args.truelabel,args.otherlabel)
     
     if args.all_opt:
         args.objective = True

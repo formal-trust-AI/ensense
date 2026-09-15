@@ -1,10 +1,12 @@
-# Model name: models/iris/iris_t100_d5.json
-# Trees per class: 100
-# Number of classes: 3
-# Number of features: 4
-# Base score: 0.5
-# Max depth: 4
-# Feature names: {0: 'sepal_length', 1: 'sepal_width', 2: 'petal_length', 3: 'petal_width'}
+# Model name : models/iris/iris_t100_d5.json
+# Trees per class : 100
+# Number of classes : 3
+# Number of features : 4
+# Base score : 0.5
+# Max depth : 4
+# Feature names : {0: 'sepal_length', 1: 'sepal_width', 2: 'petal_length', 3: 'petal_width'}
 # --==> Query : 0
-Insensitive [1]
-# Time : 0.0026918380171991885
+# Insensitive : [1]
+# Time : 0.002806963981129229 seconds
+
+# Fraction of sensitive queries: : 0/1

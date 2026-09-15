@@ -1,10 +1,12 @@
-# Model name: models/tree_verification_models/breast_cancer_robust/0004.resaved.json
-# Trees per class: 4
-# Number of classes: 1
-# Number of features: 11
-# Base score: 0.5
-# Max depth: 5
-# Feature names: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10'}
+# Model name : models/tree_verification_models/breast_cancer_robust/0004.resaved.json
+# Trees per class : 4
+# Number of classes : 1
+# Number of features : 11
+# Base score : 0.5
+# Max depth : 5
+# Feature names : {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10'}
 # --==> Query : 0
-Insensitive [3]
-# Time : 0.0006984790088608861
+# Insensitive : [3]
+# Time : 0.0005178680294193327 seconds
+
+# Fraction of sensitive queries: : 0/1

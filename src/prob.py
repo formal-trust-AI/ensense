@@ -177,7 +177,7 @@ def getprob(inp,probs, guards):
 
     return curprob
 
-def createprobs(model, X, y,round_digit):
+def createprobs(model, X, y):
     X = X[y == 1]
     n_features = model.n_features
     trees = model.trees
@@ -200,7 +200,7 @@ def createprobs(model, X, y,round_digit):
     if not isinstance(X, np.ndarray):
         X = X.to_numpy()
     for i in range(min(len(X), 1000)):
-        for j in range(n_features-1):
+        for j in range(n_features):
             # print(f"i: {i}, j: {j}, X[i][j]: {X[i][j]}")
             repguard = smallest_greater_than_k(guard[feat_name(j)],X[i][j])
             probs[j][repguard] += 1/min(len(X), 1000)

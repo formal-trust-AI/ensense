@@ -191,68 +191,6 @@ def solve(phi):
 
 import sys
 
-
-# names =[
-#     "CREDIT_SUM_4M",
-#     "DEBIT_SUM_6M",
-#     "CREDIT_CNT_2M",
-#     "CREDIT_SUM_5M",
-#     "L9M_DR_CR_AMT_RATIO",
-#     "CREDIT_CNT_10M",
-#     "L2M_DR_CR_AMT_RATIO",
-#     "L3M_DR_CR_AMT_RATIO",
-#     "ATM_DR_TXN_AMT_7M",
-#     "L5M_DR_CR_AMT_RATIO",
-#     "AGE",
-#     "ATM_DR_TXN_AMT_4M",
-#     "DEBIT_CNT_3M",
-#     "L6M_DR_CR_AMT_RATIO",
-#     "UPI_DR_CNT_11M",
-#     "L8M_DR_CR_AMT_RATIO",
-#     "LM_DR_CR_AMT_RATIO",
-#     "L7M_DR_CR_AMT_RATIO",
-#     "L11M_DR_CR_AMT_RATIO"
-# ]
-
-# names = names+[""]*100
-
-# operating_range ={
-#     "CREDIT_SUM_4M" :(50000,400000), # Two: But unrelated
-#     "CREDIT_SUM_5M" :(50000,400000), # Two:
-#     "DEBIT_SUM_6M"  :(50000,400000), # Two?
-
-#     "CREDIT_CNT_2M" :(5,50), # Two
-#     "DEBIT_CNT_3M"  :(5,50), # two
-#     "CREDIT_CNT_10M":(5,50), # One
-
-#     "UPI_DR_CNT_11M":(0,70),
-
-#     "ATM_DR_TXN_AMT_4M":(10,70000), # Two: But unrelated
-#     "ATM_DR_TXN_AMT_7M":(10,70000), # Two: Related
-
-#     "LM_DR_CR_AMT_RATIO"  :(.9,11),
-#     "L2M_DR_CR_AMT_RATIO" :(.9,11),
-#     "L3M_DR_CR_AMT_RATIO" :(.9,11),
-#     "L5M_DR_CR_AMT_RATIO" :(.9,11),
-#     "L6M_DR_CR_AMT_RATIO" :(.9,11),
-#     "L8M_DR_CR_AMT_RATIO" :(.9,11),
-#     "L7M_DR_CR_AMT_RATIO" :(.9,11),
-#     "L9M_DR_CR_AMT_RATIO" :(.9,11),
-#     "L11M_DR_CR_AMT_RATIO":(.9,11),
-
-#     "AGE":(25,50),
-# }
-
-
-# op_range_list = []
-# for i,f in enumerate(names):
-#     if f in operating_range:
-#         op_range_list.append( operating_range[f] )
-#     else:
-#         op_range_list.append((-10**8,10**8))
-# op_range_list.append((0,10**8))
-
-
 import pickle
 
 
@@ -307,7 +245,6 @@ def resave_model(model_file):
     print(model_file, outfile)
 
 
-# exit()
 
 # ---------------------------------------------------
 
@@ -330,7 +267,6 @@ def contrib_eval(data):
 # # print(shap_values.data)
 # # prob = round(1.0/(1.0 + math.exp(-sum(pred_new[0]))),7)
 # print(pred_new)
-# exit()
 
 
 # for i,f in enumerate(names):
@@ -338,10 +274,8 @@ def contrib_eval(data):
 #         sliced = trees[ (trees['Feature'] == f'f{i}') ]
 #         print( i,f, sliced['Split'].min(), sliced['Split'].max() )
 
-# exit()
 
 # print(sliced)
-# exit()
 
 
 def dump_dotty(model):
@@ -701,8 +635,6 @@ def search_anomaly_for_features(
         all_leaves = []
         for i in range(n_classes):
             all_leaves.append([])
-        # print(values)
-        # exit()
         for tid in range(n_trees):
             curlabel = tid % n_classes
             bits_map = values[tid]
@@ -801,7 +733,6 @@ def search_anomaly_for_features(
     # for c in aone: print(c)
     # if testing:
     #     for c in all_cons: print(c)
-    #     exit()
 
     print("Started solving")
     tic = time.perf_counter()

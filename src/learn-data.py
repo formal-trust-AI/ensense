@@ -1,5 +1,4 @@
-#!/usr/bin/python3
-
+#!/usr/bin/env python3
 import re
 import os
 import shutil
@@ -29,34 +28,6 @@ def rev(s):
     return "".join(reversed(s))
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "computed"))
-
-def clean_up_data( df ):
-    observed_map = {}
-    observed_map['SAL_BIN'] = { 'NO SALARY'  : 0,
-                                'SAL_15_25K' : 1,
-                                'SAL_25_35K' : 2,
-                                'SAL_35_45K' : 3,
-                                'BAL_45K_55K': 4,
-                                'BAL_55K_75K': 5,
-                                'BAL_75K_1L' : 6,
-                                'BAL_1L_2L'  : 7,
-                               }
-
-    observed_map['FEATURE_35_BIN_NEW'] =  { 'AVG_BAL_LESS_THAN_0' : 0,
-                                            'BAL_0_5K'            : 1,
-                                            'BAL_5_15K'           : 2,
-                                            'BAL_15K_30K'         : 3,
-                                            'BAL_30K_50K'         : 4,
-                                            'BAL_50K_1L'          : 5,
-                                            'GRT_1L'              : 6 }
-
-    observed_map['CRIF_RISK'] = {'NO CREDIT HISTORY': 0,
-                                 'LOW RISK'         : 1,
-                                 'MEDIUM RISK'      : 2,
-                                 'VERY HIGH RISK'   : 3} #[1.0, 2.0, 3.0]
-    for f in observed_map:
-        df[f] = df[f].map(observed_map[f])
-    return df
 
 
 def process_data( options ):
