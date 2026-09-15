@@ -312,7 +312,7 @@ skips queries that already have a result, so a sweep is safe to interrupt. See
 
 ---
  
-## Citation 
+## Publications 
 
 Sensitivity work
   - *[Data-Aware and Scalable Sensitivity Analysis for Decision Tree Ensembles](https://openreview.net/pdf?id=q8KqAvdfZK)*.
