@@ -558,7 +558,7 @@ def process_arguments():
     utils.multiclass_check(args.multiclass,args.truelabel,args.otherlabel)
     
     if args.all_opt:
-        args.objective = True
+        args.objective = False
         args.unaffected_cons = True
         args.affected_cons = True
         args.ancestor_cons = True
