@@ -321,7 +321,7 @@ class milpSolver(object):
                 tree = model.trees[(model.trees["Tree"] == tid)&(model.trees["class"] == c)]
                 rows_in_tree = len(tree)
                 tree = tree.set_index("Node").to_dict("index")
-                new_dfs(tree, model.get_root_name(), i, c)
+                new_dfs(tree, model.get_root_name(), i, c, root=True)
                 
                 new_leaves = self.leaf_v_list[self.leaf_count[-1] :]
                 up_cons = {}
